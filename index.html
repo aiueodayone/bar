@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bar Nightcap - 放置バー</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="haze"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="neon">Bar</span> <span class="neon neon-pink">Nightcap</span>
+  </div>
+  <div class="stats">
+    <div class="stat gold">
+      <span class="stat-icon">💰</span>
+      <span class="stat-value" id="stat-gold">0</span>
+      <span class="stat-rate" id="stat-rate">+0/秒</span>
+    </div>
+    <div class="stat level">
+      <span class="stat-icon">🏅</span>
+      <span>常連度 Lv.<span id="stat-level">1</span></span>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+
+  <section class="scene-panel">
+    <div class="scene">
+      <div class="shelf">
+        <div class="bottle b1"></div>
+        <div class="bottle b2"></div>
+        <div class="bottle b3"></div>
+        <div class="bottle b4"></div>
+        <div class="bottle b5"></div>
+        <div class="bottle b6"></div>
+      </div>
+      <div class="sign">OPEN</div>
+      <div class="counter">
+        <div class="counter-top"></div>
+        <div class="glass" id="scene-glass">
+          <div class="glass-liquid" id="scene-liquid"></div>
+          <div class="glass-emoji" id="scene-glass-emoji">🥃</div>
+        </div>
+        <div class="ashtray" id="scene-ashtray">
+          <div class="cigar" id="scene-cigar">🚬</div>
+          <div class="smoke s1"></div>
+          <div class="smoke s2"></div>
+          <div class="smoke s3"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="meters">
+      <div class="meter-row">
+        <span class="meter-label">😊 満足度 (XP)</span>
+        <div class="meter-bar"><div class="meter-fill xp-fill" id="meter-xp"></div></div>
+        <span class="meter-text" id="meter-xp-text">0 / 100</span>
+      </div>
+      <div class="meter-row">
+        <span class="meter-label">🍶 ほろ酔い</span>
+        <div class="meter-bar"><div class="meter-fill buzz-fill" id="meter-buzz"></div></div>
+        <span class="meter-text" id="meter-buzz-text">0%</span>
+      </div>
+      <div class="meter-row">
+        <span class="meter-label">💨 リラックス</span>
+        <div class="meter-bar"><div class="meter-fill relax-fill" id="meter-relax"></div></div>
+        <span class="meter-text" id="meter-relax-text">0%</span>
+      </div>
+    </div>
+    <div class="status-line" id="status-line">今夜も静かな夜。まずは一杯どうですか。</div>
+  </section>
+
+  <section class="menu-panel">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="drinks">🍸 ドリンク</button>
+      <button class="tab-btn" data-tab="cigars">🚬 葉巻</button>
+      <button class="tab-btn" data-tab="achievements">🏆 実績</button>
+    </div>
+
+    <div class="tab-content active" id="tab-drinks">
+      <div class="menu-grid" id="drinks-grid"></div>
+    </div>
+
+    <div class="tab-content" id="tab-cigars">
+      <div class="menu-grid" id="cigars-grid"></div>
+    </div>
+
+    <div class="tab-content" id="tab-achievements">
+      <div class="ach-grid" id="achievements-grid"></div>
+    </div>
+
+    <button class="reset-btn" id="reset-btn">🗑 セーブデータをリセット</button>
+  </section>
+
+</main>
+
+<div class="toast-container" id="toast-container"></div>
+
+<div class="modal-overlay" id="welcome-modal">
+  <div class="modal">
+    <h2>🌙 おかえりなさい</h2>
+    <p id="welcome-text"></p>
+    <button class="modal-close" id="welcome-close">グラスを手に取る</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="reset-modal">
+  <div class="modal">
+    <h2>⚠️ 本当にリセットしますか？</h2>
+    <p>これまでの記録（ゴールド・レベル・実績）はすべて消えます。この操作は取り消せません。</p>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="reset-cancel">やめる</button>
+      <button class="modal-confirm" id="reset-confirm">リセットする</button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
