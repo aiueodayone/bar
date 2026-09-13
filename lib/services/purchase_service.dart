@@ -8,10 +8,14 @@ import 'settings_service.dart';
 /// Google Play Console でアプリ内アイテムとしてこの ID を登録すること。
 const String kRemoveAdsProductId = 'remove_ads_lifetime';
 
-/// 「広告完全削除」の買い切り課金を扱うサービス。
+/// テーマパック(着せ替え)解放(買い切り)の課金アイテムID。
+/// Google Play Console でアプリ内アイテムとしてこの ID を登録すること。
+const String kThemePackProductId = 'premium_themes_pack';
+
+/// 「広告完全削除」「テーマパック解放」の買い切り課金を扱うサービス。
 ///
-/// バナー広告のみで運用し、価値を感じたユーザーが買い切りで広告を消せる
-/// フリーミアムモデルを想定している。
+/// バナー広告のみで運用し、価値を感じたユーザーが買い切りで広告を消したり
+/// 追加のカラーテーマを使えるようにしたりするフリーミアムモデルを想定している。
 class PurchaseService {
   PurchaseService({SettingsService? settingsService})
       : _settingsService = settingsService ?? SettingsService();
@@ -23,8 +27,14 @@ class PurchaseService {
   final _adsRemovedController = StreamController<bool>.broadcast();
   Stream<bool> get adsRemovedStream => _adsRemovedController.stream;
 
+  final _themesUnlockedController = StreamController<bool>.broadcast();
+  Stream<bool> get themesUnlockedStream => _themesUnlockedController.stream;
+
   ProductDetails? _removeAdsProduct;
   ProductDetails? get removeAdsProduct => _removeAdsProduct;
+
+  ProductDetails? _themePackProduct;
+  ProductDetails? get themePackProduct => _themePackProduct;
 
   Future<void> initialize() async {
     final available = await _iap.isAvailable();
@@ -35,15 +45,24 @@ class PurchaseService {
       onError: (Object _) {},
     );
 
-    final response =
-        await _iap.queryProductDetails({kRemoveAdsProductId});
-    if (response.productDetails.isNotEmpty) {
-      _removeAdsProduct = response.productDetails.first;
+    final response = await _iap.queryProductDetails({
+      kRemoveAdsProductId,
+      kThemePackProductId,
+    });
+    for (final product in response.productDetails) {
+      if (product.id == kRemoveAdsProductId) {
+        _removeAdsProduct = product;
+      } else if (product.id == kThemePackProductId) {
+        _themePackProduct = product;
+      }
     }
   }
 
-  Future<void> buyRemoveAds() async {
-    final product = _removeAdsProduct;
+  Future<void> buyRemoveAds() => _buy(_removeAdsProduct);
+
+  Future<void> buyThemePack() => _buy(_themePackProduct);
+
+  Future<void> _buy(ProductDetails? product) async {
     if (product == null) return;
     final purchaseParam = PurchaseParam(productDetails: product);
     await _iap.buyNonConsumable(purchaseParam: purchaseParam);
@@ -55,18 +74,15 @@ class PurchaseService {
     List<PurchaseDetails> purchases,
   ) async {
     for (final purchase in purchases) {
-      if (purchase.productID != kRemoveAdsProductId) continue;
+      final unlocked = purchase.status == PurchaseStatus.purchased ||
+          purchase.status == PurchaseStatus.restored;
 
-      switch (purchase.status) {
-        case PurchaseStatus.purchased:
-        case PurchaseStatus.restored:
-          await _settingsService.setAdsRemoved(true);
-          _adsRemovedController.add(true);
-          break;
-        case PurchaseStatus.error:
-        case PurchaseStatus.canceled:
-        case PurchaseStatus.pending:
-          break;
+      if (unlocked && purchase.productID == kRemoveAdsProductId) {
+        await _settingsService.setAdsRemoved(true);
+        _adsRemovedController.add(true);
+      } else if (unlocked && purchase.productID == kThemePackProductId) {
+        await _settingsService.setThemesUnlocked(true);
+        _themesUnlockedController.add(true);
       }
 
       if (purchase.pendingCompletePurchase) {
@@ -78,5 +94,6 @@ class PurchaseService {
   void dispose() {
     _subscription?.cancel();
     _adsRemovedController.close();
+    _themesUnlockedController.close();
   }
 }

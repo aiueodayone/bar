@@ -28,22 +28,29 @@ class MemoApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TemplateProvider()..load()),
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()..init()),
       ],
-      child: MaterialApp(
-        title: 'メモ帳',
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('ja', 'JP'),
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.teal,
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-        ),
-        home: const _AppEntryPoint(),
+      child: Builder(
+        builder: (context) {
+          final seedColor =
+              context.watch<AppSettingsProvider>().currentTheme.seedColor;
+          return MaterialApp(
+            title: 'メモ帳',
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('ja', 'JP'),
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: seedColor),
+              scaffoldBackgroundColor: Colors.white,
+              useMaterial3: true,
+            ),
+            darkTheme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: seedColor,
+                brightness: Brightness.dark,
+              ),
+              useMaterial3: true,
+            ),
+            home: const _AppEntryPoint(),
+          );
+        },
       ),
     );
   }
