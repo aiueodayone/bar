@@ -1,20 +1,157 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
+
+import 'package:archive/archive_io.dart';
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:vosk_flutter/vosk_flutter.dart';
+
+import 'audio_service.dart';
+
 /// オフライン音声認識(Vosk)を利用した文字起こしを提供するサービス。
 ///
-/// 診断用ビルド: vosk_flutter が原因と疑われるネイティブクラッシュを
-/// 切り分けるため、一時的に実処理を無効化している。
-/// (公開APIの形は維持し、呼び出し側 [memo_edit_screen.dart] の変更を避ける)
+/// 初回のみ日本語モデル(小型・約50MB)をダウンロードしてアプリの保存領域に
+/// 展開する。以降は完全にオフラインで文字起こしが行える。
 class TranscriptionService {
+  static const String modelName = 'vosk-model-small-ja-0.22';
+  static const String modelUrl =
+      'https://alphacephei.com/vosk/models/$modelName.zip';
+
+  Model? _model;
+
+  /// モデルのダウンロード進捗(0.0〜1.0)を通知しつつダウンロード・展開する。
+  /// すでにダウンロード済みの場合は何もせず即座に完了する。
   Future<void> ensureModelReady({
     void Function(double progress)? onProgress,
   }) async {
-    throw StateError('この診断用ビルドでは文字起こし機能を一時的に無効化しています');
+    final modelDir = await _modelDirectory();
+    if (await modelDir.exists() && !(await modelDir.list().isEmpty)) {
+      onProgress?.call(1);
+      return;
+    }
+
+    final zipBytes = await _downloadWithProgress(modelUrl, onProgress);
+    final modelsRoot = await _modelsRootDirectory();
+    await Isolate.run(() {
+      final archive = ZipDecoder().decodeBytes(zipBytes);
+      extractArchiveToDisk(archive, modelsRoot.path);
+    });
   }
 
-  Future<bool> isModelReady() async => false;
+  Future<bool> isModelReady() async {
+    final modelDir = await _modelDirectory();
+    return modelDir.exists();
+  }
 
+  Future<void> _loadModelIfNeeded() async {
+    if (_model != null) return;
+    final modelDir = await _modelDirectory();
+    if (!await modelDir.exists()) {
+      throw StateError('文字起こしモデルがまだダウンロードされていません');
+    }
+    final vosk = VoskFlutterPlugin.instance();
+    _model = await vosk.createModel(modelDir.path);
+  }
+
+  /// 録音済みの WAV ファイル(16bit PCM, モノラル)からテキストを書き起こす。
   Future<String> transcribeWavFile(String wavPath) async {
-    throw StateError('この診断用ビルドでは文字起こし機能を一時的に無効化しています');
+    await _loadModelIfNeeded();
+    final vosk = VoskFlutterPlugin.instance();
+    final recognizer = await vosk.createRecognizer(
+      model: _model!,
+      sampleRate: kAudioSampleRate,
+    );
+
+    try {
+      final bytes = await File(wavPath).readAsBytes();
+      final pcm = _stripWavHeader(bytes);
+
+      const chunkSize = 8192;
+      var pos = 0;
+      while (pos + chunkSize < pcm.length) {
+        await recognizer.acceptWaveformBytes(
+          Uint8List.sublistView(pcm, pos, pos + chunkSize),
+        );
+        pos += chunkSize;
+      }
+      if (pos < pcm.length) {
+        await recognizer.acceptWaveformBytes(
+          Uint8List.sublistView(pcm, pos, pcm.length),
+        );
+      }
+
+      final resultJson = await recognizer.getFinalResult();
+      final decoded = jsonDecode(resultJson) as Map<String, dynamic>;
+      return (decoded['text'] as String?)?.trim() ?? '';
+    } finally {
+      await recognizer.dispose();
+    }
   }
 
-  void dispose() {}
+  Future<Uint8List> _downloadWithProgress(
+    String url,
+    void Function(double progress)? onProgress,
+  ) async {
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', Uri.parse(url));
+      final response = await client.send(request);
+      final total = response.contentLength ?? 0;
+      var received = 0;
+      final bytes = <int>[];
+
+      await for (final chunk in response.stream) {
+        bytes.addAll(chunk);
+        received += chunk.length;
+        if (total > 0) {
+          onProgress?.call(received / total);
+        }
+      }
+      return Uint8List.fromList(bytes);
+    } finally {
+      client.close();
+    }
+  }
+
+  Uint8List _stripWavHeader(Uint8List bytes) {
+    // 標準的な WAV(RIFF)ファイルの 'data' サブチャンクを探して、
+    // そこから先の生の PCM サンプルだけを取り出す。
+    final byteData = ByteData.sublistView(bytes);
+    var offset = 12; // "RIFF" + size(4) + "WAVE"
+    while (offset + 8 <= bytes.length) {
+      final chunkId = String.fromCharCodes(bytes.sublist(offset, offset + 4));
+      final chunkSize = byteData.getUint32(offset + 4, Endian.little);
+      final dataStart = offset + 8;
+      if (chunkId == 'data') {
+        final end = (dataStart + chunkSize) > bytes.length
+            ? bytes.length
+            : dataStart + chunkSize;
+        return Uint8List.sublistView(bytes, dataStart, end);
+      }
+      offset = dataStart + chunkSize + (chunkSize.isOdd ? 1 : 0);
+    }
+    // data チャンクが見つからない場合は、そのまま返す(フォールバック)。
+    return bytes;
+  }
+
+  Future<Directory> _modelsRootDirectory() async {
+    final docDir = await getApplicationDocumentsDirectory();
+    final dir = Directory(p.join(docDir.path, 'models'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  Future<Directory> _modelDirectory() async {
+    final root = await _modelsRootDirectory();
+    return Directory(p.join(root.path, modelName));
+  }
+
+  void dispose() {
+    _model?.dispose();
+  }
 }

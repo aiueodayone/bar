@@ -28,17 +28,13 @@ dependencies:
   permission_handler: ^12.0.3
 
   # Offline speech-to-text
-  # DIAGNOSTIC BUILD: vosk_flutter temporarily removed to isolate a
-  # native-level startup crash. See TranscriptionService for the stub.
-  # vosk_flutter: ^0.3.48
-  # http: ^0.13.5
-  # archive: ^3.6.1
+  vosk_flutter: ^0.3.48
+  http: ^0.13.5
+  archive: ^3.6.1
 
   # Ads & monetization
-  # DIAGNOSTIC BUILD: temporarily removed to isolate a native-level
-  # startup crash (native SDK init happens outside Dart's error handling).
-  # google_mobile_ads: ^9.1.0
-  # in_app_purchase: ^3.3.0
+  google_mobile_ads: ^9.1.0
+  in_app_purchase: ^3.3.0
 
   # Export / share
   share_plus: ^13.3.0
