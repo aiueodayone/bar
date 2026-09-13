@@ -1,5 +1,5 @@
 name: memo_app
-description: "広告に邪魔されない、音声メモ・文字起こし・ジャンル分類・検索ができるオフライン対応メモアプリ。"
+description: "手もとメモ ― 声も文字も、すぐ記録。アカウント不要・オフラインで使えるシンプルなメモ帳。"
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -25,7 +25,7 @@ dependencies:
   # Audio recording & playback
   record: ^7.1.1
   audioplayers: ^6.8.1
-  permission_handler: ^10.2.0
+  permission_handler: ^13.0.2
 
   # Offline speech-to-text
   vosk_flutter: ^0.3.48
@@ -47,6 +47,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+
+# vosk_flutter (0.3.48) declares a narrow `permission_handler: ^10.2.0`
+# constraint, but that old permission_handler_android still references the
+# Flutter v1 plugin embedding (`PluginRegistry.Registrar`), which recent
+# Flutter engines no longer ship — it fails to compile on Android. The
+# Dart-facing API we (and vosk_flutter) actually use — Permission.microphone,
+# .status, .request() — is unchanged in newer major versions, so force a
+# modern, compiling permission_handler instead of waiting on vosk_flutter's
+# pubspec to catch up.
+dependency_overrides:
+  permission_handler: ^13.0.2
 
 flutter:
   uses-material-design: true
