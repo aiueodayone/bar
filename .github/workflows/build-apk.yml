@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -26,12 +27,13 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Build release APK (per-ABI, smaller downloads)
-        run: flutter build apk --release --split-per-abi
+      - name: Build release APK
+        run: flutter build apk --release --verbose
+        timeout-minutes: 12
 
-      - name: Upload APKs
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: memo-app-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
