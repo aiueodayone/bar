@@ -7,6 +7,8 @@ import 'providers/genre_provider.dart';
 import 'providers/memo_provider.dart';
 import 'providers/template_provider.dart';
 import 'screens/home_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'services/settings_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,8 +43,36 @@ class MemoApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
-        home: const HomeScreen(),
+        home: const _AppEntryPoint(),
       ),
+    );
+  }
+}
+
+/// 初回起動かどうかを判定し、オンボーディングかホーム画面のどちらかを表示する。
+class _AppEntryPoint extends StatefulWidget {
+  const _AppEntryPoint();
+
+  @override
+  State<_AppEntryPoint> createState() => _AppEntryPointState();
+}
+
+class _AppEntryPointState extends State<_AppEntryPoint> {
+  late final Future<bool> _hasSeenOnboarding =
+      SettingsService().hasSeenOnboarding();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _hasSeenOnboarding,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return snapshot.data! ? const HomeScreen() : const OnboardingScreen();
+      },
     );
   }
 }
