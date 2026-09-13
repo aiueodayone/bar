@@ -34,6 +34,12 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // R8(難読化・コード削除)が有効な release ビルドだけ起動直後に
+            // 落ちることを debug ビルドとの比較で確認済み。原因クラスの
+            // 特定より、ここで難読化自体を切って安定動作を優先する。
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
