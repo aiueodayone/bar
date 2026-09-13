@@ -102,10 +102,10 @@ class SettingsScreen extends StatelessWidget {
           const Divider(),
           const AboutListTile(
             icon: Icon(Icons.info_outline),
-            applicationName: 'メモ帳',
+            applicationName: '手もとメモ',
             applicationVersion: '1.0.0',
             aboutBoxChildren: [
-              Text('広告に邪魔されず、音声メモ・文字起こし・ジャンル分類・検索ができるメモアプリです。'),
+              Text('声も文字も、すぐ記録。広告に邪魔されず、音声メモ・文字起こし・ジャンル分類・検索ができるメモアプリです。'),
               SizedBox(height: 16),
               Text(
                 'オフライン音声認識には Vosk(alphacephei.com)を使用しています。'

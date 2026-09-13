@@ -48,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onChanged: memoProvider.setSearchQuery,
               )
-            : const Text('メモ帳'),
+            : const Text('手もとメモ'),
         actions: [
           IconButton(
             icon: Icon(_searching ? Icons.close : Icons.search),

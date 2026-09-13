@@ -33,7 +33,7 @@ class MemoApp extends StatelessWidget {
           final seedColor =
               context.watch<AppSettingsProvider>().currentTheme.seedColor;
           return MaterialApp(
-            title: 'メモ帳',
+            title: '手もとメモ',
             debugShowCheckedModeBanner: false,
             locale: const Locale('ja', 'JP'),
             theme: ThemeData(

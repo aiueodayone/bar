@@ -68,7 +68,7 @@ class ExportService {
 
   String _buildExportText(List<Memo> memos, List<Genre> genres) {
     final buffer = StringBuffer();
-    buffer.writeln('メモ帳 エクスポート (${_dateFormat.format(DateTime.now())})');
+    buffer.writeln('手もとメモ エクスポート (${_dateFormat.format(DateTime.now())})');
     buffer.writeln('=' * 40);
 
     final genreById = {for (final g in genres) g.id: g};
