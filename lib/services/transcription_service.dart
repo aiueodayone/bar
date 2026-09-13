@@ -34,11 +34,38 @@ class TranscriptionService {
     }
 
     final zipBytes = await _downloadWithProgress(modelUrl, onProgress);
-    final modelsRoot = await _modelsRootDirectory();
     await Isolate.run(() {
       final archive = ZipDecoder().decodeBytes(zipBytes);
-      extractArchiveToDisk(archive, modelsRoot.path);
+      _extractModelArchive(archive, modelDir.path);
     });
+
+    // 配布元が zip 内部のトップレベルフォルダ名を変更した場合など、
+    // 展開しても想定のパスにモデルが現れないことがある。ここで確定させて
+    // おかないと、次に文字起こしを実行した瞬間に分かりにくいエラーになる。
+    if (!await modelDir.exists() || await modelDir.list().isEmpty) {
+      throw StateError('モデルの展開に失敗しました。お手数ですが、もう一度お試しください');
+    }
+  }
+
+  /// zip 内のトップレベルフォルダ名がこちらの想定([modelName])と一致しなくても
+  /// 文字起こしできるよう、トップレベルの1階層を読み飛ばして常に [destDir] 直下へ
+  /// 展開する(vosk-model-small-ja-0.22.zip のような配布物は、通常
+  /// 「<モデル名>/am/...」のように単一のルートフォルダを含む)。
+  static void _extractModelArchive(Archive archive, String destDir) {
+    for (final file in archive.files) {
+      final parts = p.split(file.name.replaceAll('\\', '/'));
+      if (parts.length <= 1) continue;
+      final relativePath = p.joinAll(parts.skip(1));
+      if (relativePath.isEmpty) continue;
+      final outPath = p.join(destDir, relativePath);
+      if (!file.isFile) {
+        Directory(outPath).createSync(recursive: true);
+        continue;
+      }
+      final outFile = File(outPath);
+      outFile.parent.createSync(recursive: true);
+      outFile.writeAsBytesSync(file.content as List<int>);
+    }
   }
 
   Future<bool> isModelReady() async {
