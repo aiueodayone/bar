@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
@@ -10,16 +12,31 @@ import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/settings_service.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  // 広告SDKの初期化に失敗しても(Google Playサービス非搭載の端末など)、
-  // アプリ本体は起動できるようにする。広告が出ないだけに留める。
-  try {
-    await MobileAds.instance.initialize();
-  } catch (_) {
-    // 広告なしで続行
-  }
-  runApp(const MemoApp());
+void main() {
+  // 想定していない箇所で例外が出ても、アプリ全体が落ちるのではなく
+  // ログに残すだけに留める安全網。個別の対処(広告SDK・課金APIなど)は
+  // それぞれの箇所でも別途 try/catch している。
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+      };
+
+      try {
+        await MobileAds.instance.initialize();
+      } catch (_) {
+        // 広告なしで続行
+      }
+
+      runApp(const MemoApp());
+    },
+    (error, stack) {
+      // 未捕捉の例外はここで握りつぶし、アプリを落とさない。
+      debugPrint('Uncaught error: $error\n$stack');
+    },
+  );
 }
 
 class MemoApp extends StatelessWidget {
