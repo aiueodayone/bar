@@ -5,6 +5,7 @@ import '../data/genre_repository.dart';
 import '../data/memo_repository.dart';
 import '../providers/app_settings_provider.dart';
 import '../services/export_service.dart';
+import 'template_management_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -30,6 +31,16 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('議事録テンプレートを管理'),
+            subtitle: const Text('プリセットの確認・カスタムテンプレートの作成'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const TemplateManagementScreen(),
+              ),
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.ios_share),
             title: const Text('全メモをエクスポート'),

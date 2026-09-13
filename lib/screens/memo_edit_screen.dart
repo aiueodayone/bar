@@ -15,10 +15,19 @@ import '../services/transcription_service.dart';
 import '../widgets/recording_waveform.dart';
 
 class MemoEditScreen extends StatefulWidget {
-  const MemoEditScreen({super.key, this.memoId});
+  const MemoEditScreen({
+    super.key,
+    this.memoId,
+    this.initialTitle,
+    this.initialContent,
+  });
 
   /// null の場合は新規作成。
   final String? memoId;
+
+  /// 新規作成時(テンプレートから作成した場合など)の初期タイトル・本文。
+  final String? initialTitle;
+  final String? initialContent;
 
   @override
   State<MemoEditScreen> createState() => _MemoEditScreenState();
@@ -86,6 +95,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       final draft = context.read<MemoProvider>().createDraft();
       _original = draft;
       _selectedGenreId = draft.genreId;
+      _titleController.text = widget.initialTitle ?? '';
+      _contentController.text = widget.initialContent ?? '';
     }
     setState(() => _isLoading = false);
   }

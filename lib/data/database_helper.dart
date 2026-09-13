@@ -55,6 +55,13 @@ class DatabaseHelper {
         await db.execute(
           'CREATE INDEX idx_memos_updated_at ON memos (updated_at DESC)',
         );
+        await db.execute('''
+          CREATE TABLE templates (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            body TEXT NOT NULL
+          )
+        ''');
       },
     );
   }
