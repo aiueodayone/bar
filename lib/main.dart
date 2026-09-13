@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/app_settings_provider.dart';
@@ -13,9 +12,11 @@ import 'screens/onboarding_screen.dart';
 import 'services/settings_service.dart';
 
 void main() {
+  // 診断用ビルド: 広告SDK(google_mobile_ads)の初期化を一時的に無効化し、
+  // それが起動時クラッシュの原因かどうかを切り分ける。
+  //
   // 想定していない箇所で例外が出ても、アプリ全体が落ちるのではなく
-  // ログに残すだけに留める安全網。個別の対処(広告SDK・課金APIなど)は
-  // それぞれの箇所でも別途 try/catch している。
+  // ログに残すだけに留める安全網。
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
@@ -23,12 +24,6 @@ void main() {
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
       };
-
-      try {
-        await MobileAds.instance.initialize();
-      } catch (_) {
-        // 広告なしで続行
-      }
 
       runApp(const MemoApp());
     },

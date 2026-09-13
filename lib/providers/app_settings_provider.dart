@@ -19,13 +19,13 @@ class AppSettingsProvider extends ChangeNotifier {
   bool get adsRemoved => _adsRemoved;
 
   bool get canPurchase => _purchaseService.removeAdsProduct != null;
-  String? get removeAdsPrice => _purchaseService.removeAdsProduct?.price;
+  String? get removeAdsPrice => null;
 
   bool _themesUnlocked = false;
   bool get themesUnlocked => _themesUnlocked;
 
   bool get canPurchaseThemePack => _purchaseService.themePackProduct != null;
-  String? get themePackPrice => _purchaseService.themePackProduct?.price;
+  String? get themePackPrice => null;
 
   AppTheme _currentTheme = findThemeById(kDefaultThemeId);
   AppTheme get currentTheme => _currentTheme;

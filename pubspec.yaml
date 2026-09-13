@@ -35,8 +35,10 @@ dependencies:
   # archive: ^3.6.1
 
   # Ads & monetization
-  google_mobile_ads: ^9.1.0
-  in_app_purchase: ^3.3.0
+  # DIAGNOSTIC BUILD: temporarily removed to isolate a native-level
+  # startup crash (native SDK init happens outside Dart's error handling).
+  # google_mobile_ads: ^9.1.0
+  # in_app_purchase: ^3.3.0
 
   # Export / share
   share_plus: ^13.3.0
