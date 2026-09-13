@@ -25,7 +25,7 @@ dependencies:
   # Audio recording & playback
   record: ^7.1.1
   audioplayers: ^6.8.1
-  permission_handler: ^13.0.2
+  permission_handler: ^12.0.3
 
   # Offline speech-to-text
   vosk_flutter: ^0.3.48
@@ -54,10 +54,16 @@ dev_dependencies:
 # Flutter engines no longer ship — it fails to compile on Android. The
 # Dart-facing API we (and vosk_flutter) actually use — Permission.microphone,
 # .status, .request() — is unchanged in newer major versions, so force a
-# modern, compiling permission_handler instead of waiting on vosk_flutter's
-# pubspec to catch up.
+# modern permission_handler instead of waiting on vosk_flutter's pubspec to
+# catch up.
+#
+# Pinned to 12.0.3 rather than the very latest (13.x): 13.x pulls in
+# permission_handler_android 14.x, which raises its required compileSdk to
+# 37 — past what the Android Gradle Plugin bundled with our current Flutter
+# can compile against (max 36). permission_handler_android 13.x (pulled in
+# by 12.0.3) already dropped the v1 embedding without that compileSdk jump.
 dependency_overrides:
-  permission_handler: ^13.0.2
+  permission_handler: ^12.0.3
 
 flutter:
   uses-material-design: true
