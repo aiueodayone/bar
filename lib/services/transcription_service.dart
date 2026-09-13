@@ -13,10 +13,12 @@ import 'audio_service.dart';
 
 /// オフライン音声認識(Vosk)を利用した文字起こしを提供するサービス。
 ///
-/// 初回のみ日本語モデル(小型・約50MB)をダウンロードしてアプリの保存領域に
-/// 展開する。以降は完全にオフラインで文字起こしが行える。
+/// 初回のみ日本語モデル(フルサイズ・約1GB)をダウンロードしてアプリの
+/// 保存領域に展開する。以降は完全にオフラインで文字起こしが行える。
+/// 軽量版(vosk-model-small-ja)より精度は高いが、ダウンロードにも文字
+/// 起こし自体にも時間がかかる。
 class TranscriptionService {
-  static const String modelName = 'vosk-model-small-ja-0.22';
+  static const String modelName = 'vosk-model-ja-0.22';
   static const String modelUrl =
       'https://alphacephei.com/vosk/models/$modelName.zip';
 
@@ -33,11 +35,26 @@ class TranscriptionService {
       return;
     }
 
-    final zipBytes = await _downloadWithProgress(modelUrl, onProgress);
-    await Isolate.run(() {
-      final archive = ZipDecoder().decodeBytes(zipBytes);
-      _extractModelArchive(archive, modelDir.path);
-    });
+    // フルサイズモデルは約1GB。zip全体をメモリ上の List<int> に貯めてから
+    // 展開すると、ダウンロード分＋展開時の一時コピー分で端末のメモリを
+    // 圧迫し OOM で落ちかねないため、いったんディスクへストリーミング
+    // 保存し、zip の展開もファイルから直接ストリーミングで行う。
+    final zipFile = await _downloadToTempFile(modelUrl, onProgress);
+    try {
+      await Isolate.run(() {
+        final inputStream = InputFileStream(zipFile.path);
+        try {
+          final archive = ZipDecoder().decodeBuffer(inputStream);
+          _extractModelArchive(archive, modelDir.path);
+        } finally {
+          inputStream.close();
+        }
+      });
+    } finally {
+      if (await zipFile.exists()) {
+        await zipFile.delete();
+      }
+    }
 
     // 配布元が zip 内部のトップレベルフォルダ名を変更した場合など、
     // 展開しても想定のパスにモデルが現れないことがある。ここで確定させて
@@ -49,8 +66,8 @@ class TranscriptionService {
 
   /// zip 内のトップレベルフォルダ名がこちらの想定([modelName])と一致しなくても
   /// 文字起こしできるよう、トップレベルの1階層を読み飛ばして常に [destDir] 直下へ
-  /// 展開する(vosk-model-small-ja-0.22.zip のような配布物は、通常
-  /// 「<モデル名>/am/...」のように単一のルートフォルダを含む)。
+  /// 展開する(Vosk のモデル配布物は通常「<モデル名>/am/...」のように
+  /// 単一のルートフォルダを含む)。
   static void _extractModelArchive(Archive archive, String destDir) {
     for (final file in archive.files) {
       final parts = p.split(file.name.replaceAll('\\', '/'));
@@ -118,7 +135,7 @@ class TranscriptionService {
     }
   }
 
-  Future<Uint8List> _downloadWithProgress(
+  Future<File> _downloadToTempFile(
     String url,
     void Function(double progress)? onProgress,
   ) async {
@@ -128,16 +145,23 @@ class TranscriptionService {
       final response = await client.send(request);
       final total = response.contentLength ?? 0;
       var received = 0;
-      final bytes = <int>[];
 
-      await for (final chunk in response.stream) {
-        bytes.addAll(chunk);
-        received += chunk.length;
-        if (total > 0) {
-          onProgress?.call(received / total);
+      final modelsRoot = await _modelsRootDirectory();
+      final zipFile = File(p.join(modelsRoot.path, '$modelName.zip.part'));
+      final sink = zipFile.openWrite();
+      try {
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          if (total > 0) {
+            onProgress?.call(received / total);
+          }
         }
+        await sink.flush();
+      } finally {
+        await sink.close();
       }
-      return Uint8List.fromList(bytes);
+      return zipFile;
     } finally {
       client.close();
     }

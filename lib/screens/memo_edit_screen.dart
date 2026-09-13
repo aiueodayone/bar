@@ -10,6 +10,7 @@ import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
 import '../services/audio_service.dart';
 import '../services/export_service.dart';
+import '../services/minutes_sorter.dart';
 import '../services/playback_service.dart';
 import '../services/transcription_service.dart';
 import '../widgets/recording_waveform.dart';
@@ -204,8 +205,9 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         builder: (context) => AlertDialog(
           title: const Text('文字起こしモデルのダウンロード'),
           content: const Text(
-            '初回のみ、オフライン音声認識用の日本語モデル(約50MB)を'
-            'ダウンロードします。ダウンロード後は完全にオフラインで'
+            '初回のみ、オフライン音声認識用の日本語モデル(高精度版・約1GB)を'
+            'ダウンロードします。通信量が大きいため、できればWi-Fi環境での'
+            'ダウンロードをおすすめします。ダウンロード後は完全にオフラインで'
             '文字起こしできます。\n\n'
             'この文字起こしは端末内で処理されるため、あなたの音声が'
             '外部に送信されたり、AIの学習に使われたりすることはありません。'
@@ -251,9 +253,10 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     try {
       final text = await _transcriptionService.transcribeWavFile(_audioPath!);
       if (text.isNotEmpty) {
-        final current = _contentController.text;
-        _contentController.text =
-            current.isEmpty ? text : '$current\n$text';
+        _contentController.text = MinutesSorter.applyToTemplate(
+          _contentController.text,
+          text,
+        );
         _contentController.selection = TextSelection.collapsed(
           offset: _contentController.text.length,
         );

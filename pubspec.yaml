@@ -28,7 +28,17 @@ dependencies:
   permission_handler: ^12.0.3
 
   # Offline speech-to-text
-  vosk_flutter: ^0.3.48
+  #
+  # Vendored locally (third_party/vosk_flutter) instead of the hosted
+  # 0.3.48 release: the stock plugin runs recognizer.acceptWaveForm() and
+  # getFinalResult() synchronously on Android's platform/main thread,
+  # which is the same thread Flutter's own UI runs on — every chunk of
+  # audio decoded during transcription freezes the whole app for as long
+  # as native Vosk takes to process it. The vendored copy moves both onto
+  # TaskRunner's background executor (the same pattern the plugin already
+  # uses for model loading) so transcription no longer blocks the UI.
+  vosk_flutter:
+    path: third_party/vosk_flutter
   http: ^0.13.5
   archive: ^3.6.1
 

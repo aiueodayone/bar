@@ -14,6 +14,11 @@ analyzer:
     - build/**
     - android/**
     - linux/**
+    # third_party/vosk_flutter is a vendored copy of a third-party package
+    # (see pubspec.yaml), kept as-is except for a small native patch. Its
+    # own SDK constraint predates lints this project's analyzer expects;
+    # that's the upstream package's business, not this app's.
+    - third_party/**
 
 linter:
   # The lint rules applied to this project can be customized in the
