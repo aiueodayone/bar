@@ -37,3 +37,18 @@ jobs:
           name: memo-app-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+
+      # 診断用: release ビルド(R8/難読化あり)は起動直後に落ちるが、
+      # 原因がR8による過剰な削除なのか、それ以外(ネイティブプラグイン等)
+      # なのかを切り分けるため、難読化のない debug ビルドも並行して作る。
+      # debug ビルドが開けば「R8/proguard-rulesの問題」に絞れる。
+      - name: Build debug APK
+        run: flutter build apk --debug --verbose
+        timeout-minutes: 12
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: memo-app-apk-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 30
