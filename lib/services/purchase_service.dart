@@ -37,24 +37,30 @@ class PurchaseService {
   ProductDetails? get themePackProduct => _themePackProduct;
 
   Future<void> initialize() async {
-    final available = await _iap.isAvailable();
-    if (!available) return;
+    // Play Billing が使えない端末(Playサービス非搭載など)でもアプリ本体の
+    // 起動を妨げないよう、課金関連の失敗はすべてここで吸収する。
+    try {
+      final available = await _iap.isAvailable();
+      if (!available) return;
 
-    _subscription = _iap.purchaseStream.listen(
-      _handlePurchaseUpdates,
-      onError: (Object _) {},
-    );
+      _subscription = _iap.purchaseStream.listen(
+        _handlePurchaseUpdates,
+        onError: (Object _) {},
+      );
 
-    final response = await _iap.queryProductDetails({
-      kRemoveAdsProductId,
-      kThemePackProductId,
-    });
-    for (final product in response.productDetails) {
-      if (product.id == kRemoveAdsProductId) {
-        _removeAdsProduct = product;
-      } else if (product.id == kThemePackProductId) {
-        _themePackProduct = product;
+      final response = await _iap.queryProductDetails({
+        kRemoveAdsProductId,
+        kThemePackProductId,
+      });
+      for (final product in response.productDetails) {
+        if (product.id == kRemoveAdsProductId) {
+          _removeAdsProduct = product;
+        } else if (product.id == kThemePackProductId) {
+          _themePackProduct = product;
+        }
       }
+    } catch (_) {
+      // 課金機能なしで続行
     }
   }
 

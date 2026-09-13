@@ -12,7 +12,13 @@ import 'services/settings_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MobileAds.instance.initialize();
+  // 広告SDKの初期化に失敗しても(Google Playサービス非搭載の端末など)、
+  // アプリ本体は起動できるようにする。広告が出ないだけに留める。
+  try {
+    await MobileAds.instance.initialize();
+  } catch (_) {
+    // 広告なしで続行
+  }
   runApp(const MemoApp());
 }
 
