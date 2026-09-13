@@ -206,7 +206,10 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
           content: const Text(
             '初回のみ、オフライン音声認識用の日本語モデル(約50MB)を'
             'ダウンロードします。ダウンロード後は完全にオフラインで'
-            '文字起こしできます。ダウンロードしますか?',
+            '文字起こしできます。\n\n'
+            'この文字起こしは端末内で処理されるため、あなたの音声が'
+            '外部に送信されたり、AIの学習に使われたりすることはありません。'
+            'ダウンロードしますか?',
           ),
           actions: [
             TextButton(

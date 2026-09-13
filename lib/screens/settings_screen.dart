@@ -5,6 +5,7 @@ import '../data/genre_repository.dart';
 import '../data/memo_repository.dart';
 import '../providers/app_settings_provider.dart';
 import '../services/export_service.dart';
+import 'privacy_info_screen.dart';
 import 'template_management_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -47,6 +48,14 @@ class SettingsScreen extends StatelessWidget {
             subtitle: const Text('ジャンルごとにまとめたテキストファイルを書き出して共有します'),
             onTap: () => _exportAllMemos(context),
           ),
+          ListTile(
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text('データの取り扱いについて'),
+            subtitle: const Text('録音データや文字起こしが外部に送信されるかどうか'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PrivacyInfoScreen()),
+            ),
+          ),
           const Divider(),
           if (settings.adsRemoved)
             const ListTile(
@@ -83,6 +92,17 @@ class SettingsScreen extends StatelessWidget {
             applicationVersion: '1.0.0',
             aboutBoxChildren: [
               Text('広告に邪魔されず、音声メモ・文字起こし・ジャンル分類・検索ができるメモアプリです。'),
+              SizedBox(height: 16),
+              Text(
+                'オフライン音声認識には Vosk(alphacephei.com)を使用しています。'
+                '(Apache License 2.0)',
+                style: TextStyle(fontSize: 12),
+              ),
+              Text(
+                '使用しているすべてのオープンソースライブラリのライセンスは'
+                '「ライセンスを表示」から確認できます。',
+                style: TextStyle(fontSize: 12),
+              ),
             ],
           ),
         ],
