@@ -55,6 +55,7 @@ class Memo {
     bool clearGenre = false,
     String? audioPath,
     int? audioDurationMs,
+    bool clearAudio = false,
     DateTime? updatedAt,
   }) {
     return Memo(
@@ -62,8 +63,9 @@ class Memo {
       title: title ?? this.title,
       content: content ?? this.content,
       genreId: clearGenre ? null : (genreId ?? this.genreId),
-      audioPath: audioPath ?? this.audioPath,
-      audioDurationMs: audioDurationMs ?? this.audioDurationMs,
+      audioPath: clearAudio ? null : (audioPath ?? this.audioPath),
+      audioDurationMs:
+          clearAudio ? null : (audioDurationMs ?? this.audioDurationMs),
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

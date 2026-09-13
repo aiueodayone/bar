@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart' show Amplitude;
 
 import '../data/memo_repository.dart';
 import '../models/memo.dart';
 import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
 import '../services/audio_service.dart';
+import '../services/export_service.dart';
 import '../services/playback_service.dart';
 import '../services/transcription_service.dart';
+import '../widgets/recording_waveform.dart';
 
 class MemoEditScreen extends StatefulWidget {
   const MemoEditScreen({super.key, this.memoId});
@@ -26,6 +31,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   final _audioService = AudioService();
   final _playbackService = PlaybackService();
   final _transcriptionService = TranscriptionService();
+  final _exportService = ExportService();
 
   Memo? _original;
   bool _isLoading = true;
@@ -38,6 +44,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
   bool _isRecording = false;
   Duration _recordingElapsed = Duration.zero;
+  StreamSubscription<Amplitude>? _amplitudeSub;
+  final List<double> _waveformLevels = [];
 
   bool _isPlaying = false;
   Duration _playbackPosition = Duration.zero;
@@ -84,6 +92,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
   @override
   void dispose() {
+    _amplitudeSub?.cancel();
     if (!_saved && _audioPath != null && _audioPath != _initialAudioPath) {
       _audioService.deleteFile(_audioPath!);
     }
@@ -97,9 +106,12 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
+      await _amplitudeSub?.cancel();
+      _amplitudeSub = null;
       final (path, durationMs) = await _audioService.stop();
       setState(() {
         _isRecording = false;
+        _waveformLevels.clear();
         if (path != null) {
           _audioPath = path;
           _audioDurationMs = durationMs;
@@ -113,8 +125,20 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       setState(() {
         _isRecording = true;
         _recordingElapsed = Duration.zero;
+        _waveformLevels.clear();
       });
       _tickRecordingTimer();
+      _amplitudeSub = _audioService.amplitudeStream().listen((amplitude) {
+        if (!mounted) return;
+        // dBFS(だいたい -50〜0)を 0.0〜1.0 の高さに正規化する。
+        final level = ((amplitude.current + 50) / 50).clamp(0.0, 1.0);
+        setState(() {
+          _waveformLevels.add(level);
+          if (_waveformLevels.length > 80) {
+            _waveformLevels.removeAt(0);
+          }
+        });
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -253,11 +277,65 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       clearGenre: _selectedGenreId == null,
       audioPath: _audioPath,
       audioDurationMs: _audioDurationMs,
+      clearAudio: _audioPath == null,
     );
 
     _saved = true;
     await context.read<MemoProvider>().saveMemo(memo);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  Memo _currentMemoSnapshot() {
+    return _original!.copyWith(
+      title: _titleController.text.trim(),
+      content: _contentController.text.trim(),
+      audioPath: _audioPath,
+      audioDurationMs: _audioDurationMs,
+      clearAudio: _audioPath == null,
+    );
+  }
+
+  Future<void> _shareMemo() async {
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    final hasText = title.isNotEmpty || content.isNotEmpty;
+    if (!hasText && _audioPath == null) return;
+
+    var shareAudio = false;
+    if (_audioPath != null && hasText) {
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        builder: (sheetContext) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.text_snippet_outlined),
+                title: const Text('テキストを共有'),
+                onTap: () => Navigator.of(sheetContext).pop('text'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.audiotrack_outlined),
+                title: const Text('音声ファイルを共有'),
+                onTap: () => Navigator.of(sheetContext).pop('audio'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (choice == null) return;
+      shareAudio = choice == 'audio';
+    } else if (_audioPath != null) {
+      shareAudio = true;
+    }
+
+    if (!mounted) return;
+    if (shareAudio) {
+      await _exportService.shareMemoAudio(_currentMemoSnapshot());
+    } else {
+      final genre = context.read<GenreProvider>().byId(_selectedGenreId);
+      await _exportService.shareMemoText(_currentMemoSnapshot(), genre);
+    }
   }
 
   Future<void> _delete() async {
@@ -303,6 +381,11 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       appBar: AppBar(
         title: Text(widget.memoId == null ? '新規メモ' : 'メモを編集'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share),
+            tooltip: '共有',
+            onPressed: _shareMemo,
+          ),
           if (widget.memoId != null)
             IconButton(
               icon: const Icon(Icons.delete_outline),
@@ -432,23 +515,31 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                 ),
               ),
             ] else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Column(
                 children: [
-                  IconButton.filled(
-                    icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                    iconSize: 32,
-                    style: IconButton.styleFrom(
-                      backgroundColor: _isRecording ? Colors.red : null,
-                    ),
-                    onPressed: _toggleRecording,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton.filled(
+                        icon: Icon(_isRecording ? Icons.stop : Icons.mic),
+                        iconSize: 32,
+                        style: IconButton.styleFrom(
+                          backgroundColor: _isRecording ? Colors.red : null,
+                        ),
+                        onPressed: _toggleRecording,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        _isRecording
+                            ? '録音中… ${_formatDuration(_recordingElapsed)}'
+                            : '音声メモを録音',
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    _isRecording
-                        ? '録音中… ${_formatDuration(_recordingElapsed)}'
-                        : '音声メモを録音',
-                  ),
+                  if (_isRecording) ...[
+                    const SizedBox(height: 8),
+                    RecordingWaveform(levels: _waveformLevels),
+                  ],
                 ],
               ),
           ],

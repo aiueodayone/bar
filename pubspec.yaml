@@ -36,6 +36,9 @@ dependencies:
   google_mobile_ads: ^9.1.0
   in_app_purchase: ^3.3.0
 
+  # Export / share
+  share_plus: ^13.3.0
+
   # Utilities
   intl: ^0.20.3
   uuid: ^4.6.0

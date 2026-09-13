@@ -1,10 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../data/genre_repository.dart';
+import '../data/memo_repository.dart';
 import '../providers/app_settings_provider.dart';
+import '../services/export_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  Future<void> _exportAllMemos(BuildContext context) async {
+    final memos = await MemoRepository().fetchMemos();
+    final genres = await GenreRepository().fetchGenres();
+    if (!context.mounted) return;
+    if (memos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('エクスポートするメモがありません')),
+      );
+      return;
+    }
+    await ExportService().exportAllMemos(memos, genres);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +30,13 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.ios_share),
+            title: const Text('全メモをエクスポート'),
+            subtitle: const Text('ジャンルごとにまとめたテキストファイルを書き出して共有します'),
+            onTap: () => _exportAllMemos(context),
+          ),
+          const Divider(),
           if (settings.adsRemoved)
             const ListTile(
               leading: Icon(Icons.check_circle, color: Colors.green),
