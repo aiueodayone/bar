@@ -28,9 +28,11 @@ dependencies:
   permission_handler: ^12.0.3
 
   # Offline speech-to-text
-  vosk_flutter: ^0.3.48
-  http: ^0.13.5
-  archive: ^3.6.1
+  # DIAGNOSTIC BUILD: vosk_flutter temporarily removed to isolate a
+  # native-level startup crash. See TranscriptionService for the stub.
+  # vosk_flutter: ^0.3.48
+  # http: ^0.13.5
+  # archive: ^3.6.1
 
   # Ads & monetization
   google_mobile_ads: ^9.1.0
