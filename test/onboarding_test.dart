@@ -22,7 +22,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    expect(find.text('議事録もテンプレートで\nすぐ書ける'), findsOneWidget);
+    expect(find.text('録音も文字起こしも\nメールなどですぐ共有'), findsOneWidget);
     expect(find.text('はじめる'), findsOneWidget);
   });
 }

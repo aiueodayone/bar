@@ -10,25 +10,15 @@ import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
 import '../services/audio_service.dart';
 import '../services/export_service.dart';
-import '../services/minutes_sorter.dart';
 import '../services/playback_service.dart';
 import '../services/transcription_service.dart';
 import '../widgets/recording_waveform.dart';
 
 class MemoEditScreen extends StatefulWidget {
-  const MemoEditScreen({
-    super.key,
-    this.memoId,
-    this.initialTitle,
-    this.initialContent,
-  });
+  const MemoEditScreen({super.key, this.memoId});
 
   /// null の場合は新規作成。
   final String? memoId;
-
-  /// 新規作成時(テンプレートから作成した場合など)の初期タイトル・本文。
-  final String? initialTitle;
-  final String? initialContent;
 
   @override
   State<MemoEditScreen> createState() => _MemoEditScreenState();
@@ -96,8 +86,6 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       final draft = context.read<MemoProvider>().createDraft();
       _original = draft;
       _selectedGenreId = draft.genreId;
-      _titleController.text = widget.initialTitle ?? '';
-      _contentController.text = widget.initialContent ?? '';
     }
     setState(() => _isLoading = false);
   }
@@ -253,10 +241,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     try {
       final text = await _transcriptionService.transcribeWavFile(_audioPath!);
       if (text.isNotEmpty) {
-        _contentController.text = MinutesSorter.applyToTemplate(
-          _contentController.text,
-          text,
-        );
+        final current = _contentController.text;
+        _contentController.text = current.isEmpty ? text : '$current\n$text';
         _contentController.selection = TextSelection.collapsed(
           offset: _contentController.text.length,
         );
@@ -318,9 +304,9 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     final hasText = title.isNotEmpty || content.isNotEmpty;
     if (!hasText && _audioPath == null) return;
 
-    var shareAudio = false;
+    var choice = 'text';
     if (_audioPath != null && hasText) {
-      final choice = await showModalBottomSheet<String>(
+      final picked = await showModalBottomSheet<String>(
         context: context,
         builder: (sheetContext) => SafeArea(
           child: Column(
@@ -336,22 +322,35 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                 title: const Text('音声ファイルを共有'),
                 onTap: () => Navigator.of(sheetContext).pop('audio'),
               ),
+              ListTile(
+                leading: const Icon(Icons.attach_email_outlined),
+                title: const Text('音声とテキストをまとめて共有'),
+                subtitle: const Text('メールなどに録音ファイルと文字起こし結果を添付します'),
+                onTap: () => Navigator.of(sheetContext).pop('both'),
+              ),
             ],
           ),
         ),
       );
-      if (choice == null) return;
-      shareAudio = choice == 'audio';
+      if (picked == null) return;
+      choice = picked;
     } else if (_audioPath != null) {
-      shareAudio = true;
+      choice = 'audio';
     }
 
     if (!mounted) return;
-    if (shareAudio) {
-      await _exportService.shareMemoAudio(_currentMemoSnapshot());
-    } else {
-      final genre = context.read<GenreProvider>().byId(_selectedGenreId);
-      await _exportService.shareMemoText(_currentMemoSnapshot(), genre);
+    final memo = _currentMemoSnapshot();
+    switch (choice) {
+      case 'audio':
+        await _exportService.shareMemoAudio(memo);
+        break;
+      case 'both':
+        final genre = context.read<GenreProvider>().byId(_selectedGenreId);
+        await _exportService.shareMemoAudioWithText(memo, genre);
+        break;
+      default:
+        final genre = context.read<GenreProvider>().byId(_selectedGenreId);
+        await _exportService.shareMemoText(memo, genre);
     }
   }
 

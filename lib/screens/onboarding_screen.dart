@@ -39,11 +39,11 @@ const List<_OnboardingPage> _kPages = [
         'ジャンル分けと検索で後から迷わず見つけられます。',
   ),
   _OnboardingPage(
-    icon: Icons.description_outlined,
-    title: '議事録もテンプレートで\nすぐ書ける',
+    icon: Icons.ios_share_outlined,
+    title: '録音も文字起こしも\nメールなどですぐ共有',
     description:
-        '標準議事録・1on1・ブレインストーミングなどのテンプレートから選ぶだけ。'
-        '自分だけのカスタムテンプレートも作成できます。',
+        '作成した音声メモや文字起こし結果は、メールやチャットアプリなど'
+        'お使いのアプリからそのまま送信できます。',
   ),
 ];
 

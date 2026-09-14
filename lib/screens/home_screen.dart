@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/meeting_template.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
@@ -11,7 +10,6 @@ import '../widgets/memo_list_item.dart';
 import 'genre_management_screen.dart';
 import 'memo_edit_screen.dart';
 import 'settings_screen.dart';
-import 'template_picker_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -110,54 +108,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showCreateMenu(context),
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const MemoEditScreen()),
+        ),
         child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Future<void> _showCreateMenu(BuildContext context) async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.notes),
-              title: const Text('空のメモを作成'),
-              onTap: () => Navigator.of(sheetContext).pop('blank'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.description_outlined),
-              title: const Text('議事録を作成(テンプレートから)'),
-              onTap: () => Navigator.of(sheetContext).pop('template'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (!context.mounted || choice == null) return;
-
-    if (choice == 'blank') {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const MemoEditScreen()),
-      );
-      return;
-    }
-
-    final template = await Navigator.of(context).push<MeetingTemplate>(
-      MaterialPageRoute(builder: (_) => const TemplatePickerScreen()),
-    );
-    if (template == null || !context.mounted) return;
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MemoEditScreen(
-          initialTitle: template.name,
-          initialContent: template.body,
-        ),
       ),
     );
   }

@@ -6,7 +6,6 @@ import '../data/memo_repository.dart';
 import '../providers/app_settings_provider.dart';
 import '../services/export_service.dart';
 import 'privacy_info_screen.dart';
-import 'template_management_screen.dart';
 import 'theme_selection_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -44,16 +43,6 @@ class SettingsScreen extends StatelessWidget {
             ),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ThemeSelectionScreen()),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.description_outlined),
-            title: const Text('議事録テンプレートを管理'),
-            subtitle: const Text('プリセットの確認・カスタムテンプレートの作成'),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const TemplateManagementScreen(),
-              ),
             ),
           ),
           ListTile(

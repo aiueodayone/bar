@@ -14,20 +14,9 @@ class ExportService {
 
   /// 1件のメモをテキストとして共有する(OS標準の共有シートを開く)。
   Future<void> shareMemoText(Memo memo, Genre? genre) async {
-    final buffer = StringBuffer();
-    if (memo.title.isNotEmpty) {
-      buffer.writeln(memo.title);
-      buffer.writeln();
-    }
-    buffer.writeln(memo.content);
-    if (genre != null) {
-      buffer.writeln();
-      buffer.writeln('ジャンル: ${genre.name}');
-    }
-
     await SharePlus.instance.share(
       ShareParams(
-        text: buffer.toString(),
+        text: _buildMemoText(memo, genre),
         subject: memo.title.isEmpty ? 'メモ' : memo.title,
       ),
     );
@@ -42,6 +31,33 @@ class ExportService {
         subject: memo.title.isEmpty ? '音声メモ' : memo.title,
       ),
     );
+  }
+
+  /// 音声メモの録音ファイルと、そのテキスト(文字起こし結果を含む)をまとめて
+  /// 共有する。メールなど、添付ファイルと本文を同時に送れる共有先向け。
+  Future<void> shareMemoAudioWithText(Memo memo, Genre? genre) async {
+    if (!memo.hasAudio) return;
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(memo.audioPath!)],
+        text: _buildMemoText(memo, genre),
+        subject: memo.title.isEmpty ? '音声メモ' : memo.title,
+      ),
+    );
+  }
+
+  String _buildMemoText(Memo memo, Genre? genre) {
+    final buffer = StringBuffer();
+    if (memo.title.isNotEmpty) {
+      buffer.writeln(memo.title);
+      buffer.writeln();
+    }
+    buffer.writeln(memo.content);
+    if (genre != null) {
+      buffer.writeln();
+      buffer.writeln('ジャンル: ${genre.name}');
+    }
+    return buffer.toString();
   }
 
   /// 全メモをジャンルごとにまとめた1つのテキストファイルとして書き出し、

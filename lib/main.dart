@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'providers/app_settings_provider.dart';
 import 'providers/genre_provider.dart';
 import 'providers/memo_provider.dart';
-import 'providers/template_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/settings_service.dart';
@@ -48,7 +47,6 @@ class MemoApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => MemoProvider()..load()),
         ChangeNotifierProvider(create: (_) => GenreProvider()..load()),
-        ChangeNotifierProvider(create: (_) => TemplateProvider()..load()),
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()..init()),
       ],
       child: Builder(
