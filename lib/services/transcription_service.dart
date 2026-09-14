@@ -13,12 +13,15 @@ import 'audio_service.dart';
 
 /// オフライン音声認識(Vosk)を利用した文字起こしを提供するサービス。
 ///
-/// 初回のみ日本語モデル(フルサイズ・約1GB)をダウンロードしてアプリの
+/// 初回のみ日本語モデル(軽量版・約50MB)をダウンロードしてアプリの
 /// 保存領域に展開する。以降は完全にオフラインで文字起こしが行える。
-/// 軽量版(vosk-model-small-ja)より精度は高いが、ダウンロードにも文字
-/// 起こし自体にも時間がかかる。
+///
+/// フルサイズ版(vosk-model-ja-0.22、約1GB)も精度は高いが、Vosk公式サイト
+/// の説明によると最大16GBのメモリを要し、ハイエンド (i7/Ryzen級) の
+/// サーバー・PC向けを想定したものでスマートフォンでの動作は現実的でない
+/// ため、あえて軽量版のまま据え置いている。
 class TranscriptionService {
-  static const String modelName = 'vosk-model-ja-0.22';
+  static const String modelName = 'vosk-model-small-ja-0.22';
   static const String modelUrl =
       'https://alphacephei.com/vosk/models/$modelName.zip';
 
