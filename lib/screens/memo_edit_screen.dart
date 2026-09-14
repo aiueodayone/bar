@@ -12,6 +12,7 @@ import '../services/audio_service.dart';
 import '../services/export_service.dart';
 import '../services/playback_service.dart';
 import '../services/transcription_service.dart';
+import '../widgets/genre_edit_dialog.dart';
 import '../widgets/recording_waveform.dart';
 
 class MemoEditScreen extends StatefulWidget {
@@ -433,6 +434,16 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                   onSelected: (_) =>
                       setState(() => _selectedGenreId = genre.id),
                 ),
+              ActionChip(
+                avatar: const Icon(Icons.add, size: 16),
+                label: const Text('新規ジャンル'),
+                onPressed: () async {
+                  final created = await showGenreEditDialog(context);
+                  if (created != null && mounted) {
+                    setState(() => _selectedGenreId = created.id);
+                  }
+                },
+              ),
             ],
           ),
           const SizedBox(height: 16),

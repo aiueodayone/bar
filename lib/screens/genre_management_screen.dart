@@ -3,22 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/genre.dart';
 import '../providers/genre_provider.dart';
-
-const List<Color> _kGenreColors = [
-  Colors.red,
-  Colors.pink,
-  Colors.purple,
-  Colors.deepPurple,
-  Colors.indigo,
-  Colors.blue,
-  Colors.teal,
-  Colors.green,
-  Colors.lightGreen,
-  Colors.amber,
-  Colors.orange,
-  Colors.brown,
-  Colors.blueGrey,
-];
+import '../widgets/genre_edit_dialog.dart';
 
 class GenreManagementScreen extends StatelessWidget {
   const GenreManagementScreen({super.key});
@@ -43,7 +28,8 @@ class GenreManagementScreen extends StatelessWidget {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.edit_outlined),
-                        onPressed: () => _showEditDialog(context, genre: genre),
+                        onPressed: () =>
+                            showGenreEditDialog(context, genre: genre),
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline),
@@ -55,7 +41,7 @@ class GenreManagementScreen extends StatelessWidget {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showEditDialog(context),
+        onPressed: () => showGenreEditDialog(context),
         child: const Icon(Icons.add),
       ),
     );
@@ -87,79 +73,4 @@ class GenreManagementScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _showEditDialog(BuildContext context, {Genre? genre}) async {
-    final genreProvider = context.read<GenreProvider>();
-    final controller = TextEditingController(text: genre?.name ?? '');
-    Color selectedColor = genre?.color ?? _kGenreColors.first;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setState) {
-            return AlertDialog(
-              title: Text(genre == null ? '新しいジャンル' : 'ジャンルを編集'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'ジャンル名'),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final color in _kGenreColors)
-                        GestureDetector(
-                          onTap: () => setState(() => selectedColor = color),
-                          child: CircleAvatar(
-                            backgroundColor: color,
-                            radius: 16,
-                            child: selectedColor.toARGB32() == color.toARGB32()
-                                ? const Icon(
-                                    Icons.check,
-                                    color: Colors.white,
-                                    size: 18,
-                                  )
-                                : null,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('キャンセル'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    final name = controller.text.trim();
-                    if (name.isEmpty) return;
-                    if (genre == null) {
-                      await genreProvider.addGenre(name, selectedColor);
-                    } else {
-                      await genreProvider.renameGenre(
-                        genre,
-                        name,
-                        selectedColor,
-                      );
-                    }
-                    if (dialogContext.mounted) {
-                      Navigator.of(dialogContext).pop();
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 }
