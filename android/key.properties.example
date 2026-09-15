@@ -1,0 +1,16 @@
+# このファイルを "key.properties" という名前でコピーし、実際の値を入れてください。
+# key.properties は .gitignore 済みなので、コミットされることはありません。
+#
+# storeFile を生成するには、リリースする端末(このクラウド環境ではなく、
+# あなた自身のPC)で以下のようなコマンドを実行してください:
+#
+#   keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
+#     -validity 10000 -alias upload
+#
+# 生成される release.jks とパスワードは、Play ストアでこのアプリを
+# 今後アップデートし続けるために必須です。絶対に紛失・公開しないよう、
+# 安全な場所(パスワードマネージャー等)に控えてください。
+storePassword=your-store-password
+keyPassword=your-key-password
+keyAlias=upload
+storeFile=/absolute/path/to/release.jks
