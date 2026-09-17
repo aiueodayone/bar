@@ -28,11 +28,13 @@ class AppLockProvider extends ChangeNotifier {
   /// いるユーザーなので、設定直後は解錠済み扱いにする。
   Future<void> enable({
     required String mainPassword,
-    required String secretPassword,
+    required String secretQuestion,
+    required String secretAnswer,
   }) async {
     await _service.setUp(
       mainPassword: mainPassword,
-      secretPassword: secretPassword,
+      secretQuestion: secretQuestion,
+      secretAnswer: secretAnswer,
     );
     _isEnabled = true;
     _isUnlocked = true;
@@ -50,13 +52,15 @@ class AppLockProvider extends ChangeNotifier {
   Future<bool> changePassword({
     required String currentMainPassword,
     required String newMainPassword,
-    required String newSecretPassword,
+    required String newSecretQuestion,
+    required String newSecretAnswer,
   }) async {
     final ok = await _service.verifyMainPassword(currentMainPassword);
     if (!ok) return false;
     await _service.setUp(
       mainPassword: newMainPassword,
-      secretPassword: newSecretPassword,
+      secretQuestion: newSecretQuestion,
+      secretAnswer: newSecretAnswer,
     );
     return true;
   }
@@ -65,6 +69,11 @@ class AppLockProvider extends ChangeNotifier {
   /// 確認(ロックを無効化する前・パスワードを変更する前など)に使う。
   Future<bool> verifyMainPassword(String password) {
     return _service.verifyMainPassword(password);
+  }
+
+  /// 復旧画面に表示する、設定済みの秘密の質問。未設定なら null。
+  Future<String?> getSecretQuestion() {
+    return _service.getSecretQuestion();
   }
 
   Future<bool> unlock(String password) async {
@@ -76,13 +85,13 @@ class AppLockProvider extends ChangeNotifier {
     return ok;
   }
 
-  /// 秘密のパスワードで認証できれば、メインパスワードを差し替えて
+  /// 秘密の質問の答えで認証できれば、メインパスワードを差し替えて
   /// 解錠する。
-  Future<bool> recoverWithSecretPassword({
-    required String secretPassword,
+  Future<bool> recoverWithSecretAnswer({
+    required String secretAnswer,
     required String newMainPassword,
   }) async {
-    final ok = await _service.verifySecretPassword(secretPassword);
+    final ok = await _service.verifySecretAnswer(secretAnswer);
     if (!ok) return false;
     await _service.resetMainPassword(newMainPassword);
     _isUnlocked = true;

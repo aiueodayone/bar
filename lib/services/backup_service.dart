@@ -165,8 +165,13 @@ class BackupService {
     }
 
     final encrypted = await _encryptBytes(zipBytes);
+    // 拡張子は .zip のままにする(中身はもう valid な zip ではないが)。
+    // Android の保存/選択ダイアログは .tmbackup のような独自拡張子だと
+    // MIME タイプを解決できず、保存時にファイル名が化けたり、復元時の
+    // ファイル選択ダイアログに出てこなくなったりすることがあるため、
+    // OS 全体が確実に認識できる .zip を使うほうが安全。
     final fileName =
-        'temotomemo_backup_${DateTime.now().millisecondsSinceEpoch}.tmbackup';
+        'temotomemo_backup_${DateTime.now().millisecondsSinceEpoch}.zip';
     return (encrypted, fileName);
   }
 

@@ -43,9 +43,9 @@ class SettingsScreen extends StatelessWidget {
         dialogTitle: 'バックアップの保存先を選択',
         fileName: fileName,
         bytes: bytes,
-        mimeType: 'application/octet-stream',
+        mimeType: 'application/zip',
         type: FileType.custom,
-        allowedExtensions: ['tmbackup'],
+        allowedExtensions: ['zip'],
       );
       if (!context.mounted) return;
       if (savedUri != null) {
@@ -63,8 +63,7 @@ class SettingsScreen extends StatelessWidget {
       picked = await FilePicker.pickFile(
         dialogTitle: 'バックアップファイルを選択',
         type: FileType.custom,
-        // 'zip' は暗号化対応前の旧バージョンで作られたバックアップ用。
-        allowedExtensions: ['tmbackup', 'zip'],
+        allowedExtensions: ['zip'],
       );
     } catch (_) {
       if (!context.mounted) return;
@@ -124,11 +123,12 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _enableAppLock(BuildContext context) async {
     final result = await showAppLockSetupDialog(context, title: 'アプリロックを設定');
     if (result == null) return; // キャンセル
-    final (mainPassword, secretPassword) = result;
+    final (mainPassword, secretQuestion, secretAnswer) = result;
     if (!context.mounted) return;
     await context.read<AppLockProvider>().enable(
       mainPassword: mainPassword,
-      secretPassword: secretPassword,
+      secretQuestion: secretQuestion,
+      secretAnswer: secretAnswer,
     );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
@@ -179,13 +179,14 @@ class SettingsScreen extends StatelessWidget {
 
     final result = await showAppLockSetupDialog(context, title: '新しいパスワードを設定');
     if (result == null) return; // キャンセル
-    final (newMainPassword, newSecretPassword) = result;
+    final (newMainPassword, newSecretQuestion, newSecretAnswer) = result;
 
     if (!context.mounted) return;
     final changed = await context.read<AppLockProvider>().changePassword(
       currentMainPassword: currentPassword,
       newMainPassword: newMainPassword,
-      newSecretPassword: newSecretPassword,
+      newSecretQuestion: newSecretQuestion,
+      newSecretAnswer: newSecretAnswer,
     );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

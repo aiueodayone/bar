@@ -50,20 +50,31 @@ class _AppLockScreenState extends State<AppLockScreen> {
   }
 
   Future<void> _recover() async {
-    final result = await showAppLockRecoveryDialog(context);
+    final provider = context.read<AppLockProvider>();
+    final question = await provider.getSecretQuestion();
+    if (!mounted) return;
+    if (question == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('秘密の質問が設定されていません')));
+      return;
+    }
+
+    final result = await showAppLockRecoveryDialog(
+      context,
+      secretQuestion: question,
+    );
     if (result == null) return;
-    final (secretPassword, newMainPassword) = result;
+    final (secretAnswer, newMainPassword) = result;
 
     if (!mounted) return;
-    final provider = context.read<AppLockProvider>();
-    final ok = await provider.recoverWithSecretPassword(
-      secretPassword: secretPassword,
+    final ok = await provider.recoverWithSecretAnswer(
+      secretAnswer: secretAnswer,
       newMainPassword: newMainPassword,
     );
     if (!mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('秘密のパスワードが正しくありません')));
+          .showSnackBar(const SnackBar(content: Text('答えが正しくありません')));
       return;
     }
     ScaffoldMessenger.of(context)
