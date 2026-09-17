@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../models/memo.dart';
+import '../utils/kana.dart';
 import 'database_helper.dart';
 
 /// メモの永続化(検索・ジャンル絞り込みを含む)を担うリポジトリ。
@@ -25,20 +26,27 @@ class MemoRepository {
       args.add(genreId);
     }
 
-    final trimmed = searchQuery.trim();
-    if (trimmed.isNotEmpty) {
-      where.add('(title LIKE ? OR content LIKE ?)');
-      args.add('%$trimmed%');
-      args.add('%$trimmed%');
-    }
-
     final rows = await db.query(
       'memos',
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: args.isEmpty ? null : args,
       orderBy: 'updated_at DESC',
     );
-    return rows.map(Memo.fromMap).toList();
+    var memos = rows.map(Memo.fromMap).toList();
+
+    // ひらがな・カタカナを区別せず検索できるよう、SQLの LIKE ではなく
+    // 正規化した文字列同士を Dart 側で比較する(メモ数はSQLiteに任せる
+    // 規模ではないので、性能上の問題にはならない)。
+    final trimmed = searchQuery.trim();
+    if (trimmed.isNotEmpty) {
+      final normalizedQuery = normalizeForSearch(trimmed);
+      memos = memos.where((memo) {
+        return normalizeForSearch(memo.title).contains(normalizedQuery) ||
+            normalizeForSearch(memo.content).contains(normalizedQuery);
+      }).toList();
+    }
+
+    return memos;
   }
 
   Future<Memo?> fetchMemoById(String id) async {
