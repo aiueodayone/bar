@@ -576,7 +576,7 @@ class _RecordingControls extends StatefulWidget {
 
 class _RecordingControlsState extends State<_RecordingControls> {
   Duration _elapsed = Duration.zero;
-  final List<double> _waveformLevels = [];
+  List<double> _waveformLevels = [];
   StreamSubscription<Amplitude>? _amplitudeSub;
 
   @override
@@ -588,10 +588,14 @@ class _RecordingControlsState extends State<_RecordingControls> {
       // dBFS(だいたい -50〜0)を 0.0〜1.0 の高さに正規化する。
       final level = ((amplitude.current + 50) / 50).clamp(0.0, 1.0);
       setState(() {
-        _waveformLevels.add(level);
-        if (_waveformLevels.length > 80) {
-          _waveformLevels.removeAt(0);
-        }
+        // RecordingWaveform の CustomPainter は shouldRepaint で levels を
+        // 参照比較しているため、既存のリストを in-place で書き換えると
+        // 「同じインスタンスのまま」になり変化が検出されず、波形が最初の
+        // 1本で止まって見えてしまう。新しいリストを作って差し替える。
+        final updated = [..._waveformLevels, level];
+        _waveformLevels = updated.length > 80
+            ? updated.sublist(updated.length - 80)
+            : updated;
       });
     });
   }
