@@ -1,9 +1,13 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/genre_repository.dart';
 import '../data/memo_repository.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/genre_provider.dart';
+import '../providers/memo_provider.dart';
+import '../services/backup_service.dart';
 import '../services/export_service.dart';
 import 'privacy_info_screen.dart';
 import 'theme_selection_screen.dart';
@@ -21,6 +25,79 @@ class SettingsScreen extends StatelessWidget {
       return;
     }
     await ExportService().exportAllMemos(memos, genres);
+  }
+
+  Future<void> _createBackup(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await BackupService().createAndShareBackup();
+    } catch (_) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(const SnackBar(content: Text('バックアップの作成に失敗しました')));
+    }
+  }
+
+  Future<void> _restoreBackup(BuildContext context) async {
+    final PlatformFile? picked;
+    try {
+      picked = await FilePicker.pickFile(
+        dialogTitle: 'バックアップファイルを選択',
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('ファイルを選択できませんでした')));
+      return;
+    }
+    if (picked == null) return;
+
+    if (!context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('バックアップから復元しますか?'),
+        content: const Text(
+          '選択したバックアップの内容を読み込みます。既存のメモは削除されず、'
+          '同じメモがあれば上書き、無ければ追加されます。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('復元する'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final memoProvider = context.read<MemoProvider>();
+    final genreProvider = context.read<GenreProvider>();
+
+    try {
+      final bytes = await picked.readAsBytes();
+      final (memoCount, genreCount) = await BackupService().restoreFromBackup(
+        bytes,
+      );
+      await genreProvider.load();
+      await memoProvider.load();
+      messenger.showSnackBar(
+        SnackBar(content: Text('メモ $memoCount 件、ジャンル $genreCount 件を復元しました')),
+      );
+    } on UnsupportedBackupVersionException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } on InvalidBackupFileException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('復元に失敗しました')));
+    }
   }
 
   Future<void> _restorePurchases(BuildContext context) async {
@@ -70,6 +147,19 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const PrivacyInfoScreen()),
             ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.backup_outlined),
+            title: const Text('バックアップを作成'),
+            subtitle: const Text('メモ・ジャンル・録音データをまとめて書き出して共有します'),
+            onTap: () => _createBackup(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.settings_backup_restore),
+            title: const Text('バックアップから復元'),
+            subtitle: const Text('保存しておいたバックアップファイルからメモを復元します'),
+            onTap: () => _restoreBackup(context),
           ),
           const Divider(),
           if (settings.adsRemoved)
