@@ -6,12 +6,14 @@ import 'package:record/record.dart' show Amplitude;
 
 import '../data/memo_repository.dart';
 import '../models/memo.dart';
+import '../providers/app_settings_provider.dart';
 import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
 import '../services/audio_service.dart';
 import '../services/export_service.dart';
 import '../services/playback_service.dart';
 import '../services/transcription_service.dart';
+import '../widgets/banner_ad_widget.dart';
 import '../widgets/genre_edit_dialog.dart';
 import '../widgets/recording_waveform.dart';
 
@@ -369,6 +371,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     }
 
     final genreProvider = context.watch<GenreProvider>();
+    final adsRemoved = context.watch<AppSettingsProvider>().adsRemoved;
 
     return PopScope<Object?>(
       canPop: false,
@@ -472,6 +475,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: _buildAudioSection(context),
             ),
+            if (!adsRemoved) const BannerAdWidget(),
           ],
         ),
       ),
