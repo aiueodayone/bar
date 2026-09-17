@@ -6,12 +6,15 @@ import 'package:provider/provider.dart';
 
 import '../data/genre_repository.dart';
 import '../data/memo_repository.dart';
+import '../providers/app_lock_provider.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
+import '../widgets/app_lock_setup_dialog.dart';
 import '../widgets/backup_password_dialog.dart';
+import '../widgets/simple_password_prompt_dialog.dart';
 import 'privacy_info_screen.dart';
 import 'theme_selection_screen.dart';
 
@@ -143,6 +146,78 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _enableAppLock(BuildContext context) async {
+    final result = await showAppLockSetupDialog(context, title: 'アプリロックを設定');
+    if (result == null) return; // キャンセル
+    final (mainPassword, secretPassword) = result;
+    if (!context.mounted) return;
+    await context.read<AppLockProvider>().enable(
+      mainPassword: mainPassword,
+      secretPassword: secretPassword,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('アプリロックを設定しました')));
+  }
+
+  Future<void> _disableAppLock(BuildContext context) async {
+    final password = await showSimplePasswordPromptDialog(
+      context,
+      title: 'アプリロックを解除',
+      message: '現在のメインパスワードを入力してください。',
+      confirmLabel: '解除する',
+    );
+    if (password == null) return; // キャンセル
+    if (!context.mounted) return;
+    final provider = context.read<AppLockProvider>();
+    final ok = await provider.verifyMainPassword(password);
+    if (!context.mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('パスワードが正しくありません')));
+      return;
+    }
+    await provider.disable();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('アプリロックを解除しました')));
+  }
+
+  Future<void> _changeAppLockPassword(BuildContext context) async {
+    final currentPassword = await showSimplePasswordPromptDialog(
+      context,
+      title: 'パスワードの変更',
+      message: '現在のメインパスワードを入力してください。',
+      confirmLabel: '次へ',
+    );
+    if (currentPassword == null) return; // キャンセル
+
+    if (!context.mounted) return;
+    final provider = context.read<AppLockProvider>();
+    final currentOk = await provider.verifyMainPassword(currentPassword);
+    if (!context.mounted) return;
+    if (!currentOk) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('パスワードが正しくありません')));
+      return;
+    }
+
+    final result = await showAppLockSetupDialog(context, title: '新しいパスワードを設定');
+    if (result == null) return; // キャンセル
+    final (newMainPassword, newSecretPassword) = result;
+
+    if (!context.mounted) return;
+    final changed = await context.read<AppLockProvider>().changePassword(
+      currentMainPassword: currentPassword,
+      newMainPassword: newMainPassword,
+      newSecretPassword: newSecretPassword,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(changed ? 'パスワードを変更しました' : 'パスワードの変更に失敗しました')),
+    );
+  }
+
   Future<void> _restorePurchases(BuildContext context) async {
     final settings = context.read<AppSettingsProvider>();
     await settings.restorePurchases();
@@ -157,6 +232,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettingsProvider>();
+    final appLock = context.watch<AppLockProvider>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('設定')),
@@ -206,6 +282,25 @@ class SettingsScreen extends StatelessWidget {
             subtitle: const Text('保存しておいたバックアップファイルからメモを復元します'),
             onTap: () => _restoreBackup(context),
           ),
+          const Divider(),
+          SwitchListTile(
+            secondary: const Icon(Icons.lock_outline),
+            title: const Text('アプリロック'),
+            subtitle: Text(
+              appLock.isEnabled
+                  ? '起動時・復帰時にパスワードを求めます'
+                  : 'パスワードを設定して、起動時のセキュリティを強化します',
+            ),
+            value: appLock.isEnabled,
+            onChanged: (value) =>
+                value ? _enableAppLock(context) : _disableAppLock(context),
+          ),
+          if (appLock.isEnabled)
+            ListTile(
+              leading: const Icon(Icons.password),
+              title: const Text('アプリロックのパスワードを変更'),
+              onTap: () => _changeAppLockPassword(context),
+            ),
           const Divider(),
           if (settings.adsRemoved)
             const ListTile(

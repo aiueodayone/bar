@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 
+import 'providers/app_lock_provider.dart';
 import 'providers/app_settings_provider.dart';
 import 'providers/genre_provider.dart';
 import 'providers/memo_provider.dart';
+import 'screens/app_lock_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/settings_service.dart';
@@ -48,6 +50,7 @@ class MemoApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MemoProvider()..load()),
         ChangeNotifierProvider(create: (_) => GenreProvider()..load()),
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()..init()),
+        ChangeNotifierProvider(create: (_) => AppLockProvider()..init()),
       ],
       child: Builder(
         builder: (context) {
@@ -71,11 +74,53 @@ class MemoApp extends StatelessWidget {
               ),
               useMaterial3: true,
             ),
-            home: const _AppEntryPoint(),
+            home: const _AppLockGate(child: _AppEntryPoint()),
           );
         },
       ),
     );
+  }
+}
+
+/// アプリロックが有効なときに、起動時とバックグラウンド復帰時に
+/// [AppLockScreen] を割り込ませる。
+class _AppLockGate extends StatefulWidget {
+  const _AppLockGate({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AppLockGate> createState() => _AppLockGateState();
+}
+
+class _AppLockGateState extends State<_AppLockGate>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // バックグラウンドに退避したタイミングで再ロックする。他人に端末を
+    // 渡した/置き忘れた場合でも、次にアプリを開く際は必ずパスワードを
+    // 要求するようにするため。
+    if (state == AppLifecycleState.paused) {
+      context.read<AppLockProvider>().lock();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isLocked = context.watch<AppLockProvider>().isLocked;
+    return isLocked ? const AppLockScreen() : widget.child;
   }
 }
 
