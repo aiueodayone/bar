@@ -44,9 +44,6 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   String? _initialAudioPath;
 
   bool _isRecording = false;
-  Duration _recordingElapsed = Duration.zero;
-  StreamSubscription<Amplitude>? _amplitudeSub;
-  final List<double> _waveformLevels = [];
 
   bool _isPlaying = false;
   Duration _playbackPosition = Duration.zero;
@@ -93,7 +90,6 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
   @override
   void dispose() {
-    _amplitudeSub?.cancel();
     if (!_saved && _audioPath != null && _audioPath != _initialAudioPath) {
       _audioService.deleteFile(_audioPath!);
     }
@@ -107,12 +103,9 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
-      await _amplitudeSub?.cancel();
-      _amplitudeSub = null;
       final (path, durationMs) = await _audioService.stop();
       setState(() {
         _isRecording = false;
-        _waveformLevels.clear();
         if (path != null) {
           _audioPath = path;
           _audioDurationMs = durationMs;
@@ -123,39 +116,13 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
     try {
       await _audioService.start();
-      setState(() {
-        _isRecording = true;
-        _recordingElapsed = Duration.zero;
-        _waveformLevels.clear();
-      });
-      _tickRecordingTimer();
-      _amplitudeSub = _audioService.amplitudeStream().listen((amplitude) {
-        if (!mounted) return;
-        // dBFS(だいたい -50〜0)を 0.0〜1.0 の高さに正規化する。
-        final level = ((amplitude.current + 50) / 50).clamp(0.0, 1.0);
-        setState(() {
-          _waveformLevels.add(level);
-          if (_waveformLevels.length > 80) {
-            _waveformLevels.removeAt(0);
-          }
-        });
-      });
+      setState(() => _isRecording = true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('録音を開始できませんでした: $e')));
       }
     }
-  }
-
-  void _tickRecordingTimer() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted || !_isRecording) return;
-      setState(() {
-        _recordingElapsed += const Duration(seconds: 1);
-      });
-      _tickRecordingTimer();
-    });
   }
 
   Future<void> _confirmDeleteAudio() async {
@@ -399,12 +366,6 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     }
   }
 
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -575,37 +536,106 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                   label: Text(_isTranscribing ? '文字起こし中…' : '文字起こしする(オフライン)'),
                 ),
               ),
-            ] else
-              Column(
+            ] else if (_isRecording)
+              _RecordingControls(
+                audioService: _audioService,
+                onStop: _toggleRecording,
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton.filled(
-                        icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                        iconSize: 32,
-                        style: IconButton.styleFrom(
-                          backgroundColor: _isRecording ? Colors.red : null,
-                        ),
-                        onPressed: _toggleRecording,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _isRecording
-                            ? '録音中… ${_formatDuration(_recordingElapsed)}'
-                            : '音声メモを録音',
-                      ),
-                    ],
+                  IconButton.filled(
+                    icon: const Icon(Icons.mic),
+                    iconSize: 32,
+                    onPressed: _toggleRecording,
                   ),
-                  if (_isRecording) ...[
-                    const SizedBox(height: 8),
-                    RecordingWaveform(levels: _waveformLevels),
-                  ],
+                  const SizedBox(width: 12),
+                  const Text('音声メモを録音'),
                 ],
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 録音中の表示(経過時間・波形)を担う。振幅は約200msごとに更新されるため、
+/// [MemoEditScreen] 全体ではなくこのウィジェットだけを再ビルドすることで、
+/// 録音中にテキスト入力欄などを含む画面全体が毎回再構築されるのを避ける。
+class _RecordingControls extends StatefulWidget {
+  const _RecordingControls({required this.audioService, required this.onStop});
+
+  final AudioService audioService;
+  final VoidCallback onStop;
+
+  @override
+  State<_RecordingControls> createState() => _RecordingControlsState();
+}
+
+class _RecordingControlsState extends State<_RecordingControls> {
+  Duration _elapsed = Duration.zero;
+  final List<double> _waveformLevels = [];
+  StreamSubscription<Amplitude>? _amplitudeSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick();
+    _amplitudeSub = widget.audioService.amplitudeStream().listen((amplitude) {
+      if (!mounted) return;
+      // dBFS(だいたい -50〜0)を 0.0〜1.0 の高さに正規化する。
+      final level = ((amplitude.current + 50) / 50).clamp(0.0, 1.0);
+      setState(() {
+        _waveformLevels.add(level);
+        if (_waveformLevels.length > 80) {
+          _waveformLevels.removeAt(0);
+        }
+      });
+    });
+  }
+
+  void _tick() {
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      setState(() => _elapsed += const Duration(seconds: 1));
+      _tick();
+    });
+  }
+
+  @override
+  void dispose() {
+    _amplitudeSub?.cancel();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton.filled(
+              icon: const Icon(Icons.stop),
+              iconSize: 32,
+              style: IconButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: widget.onStop,
+            ),
+            const SizedBox(width: 12),
+            Text('録音中… ${_formatDuration(_elapsed)}'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        RecordingWaveform(levels: _waveformLevels),
+      ],
     );
   }
 }
