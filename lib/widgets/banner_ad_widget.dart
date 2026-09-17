@@ -52,14 +52,16 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
   @override
   Widget build(BuildContext context) {
     final ad = _bannerAd;
-    if (ad == null || !_isLoaded) {
-      return const SizedBox.shrink();
-    }
+    // 広告の読み込み前後で高さが 0 ⇔ 広告サイズに切り替わると、その上に
+    // 固定表示している録音ボタンなどが読み込み完了の瞬間にガクッと
+    // 動いてしまう。読み込み中も広告と同じ高さの領域を常に確保しておく
+    // ことで、そのレイアウトのずれを防ぐ。
     return SafeArea(
+      top: false,
       child: SizedBox(
-        width: ad.size.width.toDouble(),
-        height: ad.size.height.toDouble(),
-        child: AdWidget(ad: ad),
+        width: AdSize.banner.width.toDouble(),
+        height: AdSize.banner.height.toDouble(),
+        child: (ad != null && _isLoaded) ? AdWidget(ad: ad) : null,
       ),
     );
   }

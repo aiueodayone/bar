@@ -54,14 +54,15 @@ class MemoApp extends StatelessWidget {
       ],
       child: Builder(
         builder: (context) {
-          final seedColor = context
-              .watch<AppSettingsProvider>()
-              .currentTheme
-              .seedColor;
+          final appSettings = context.watch<AppSettingsProvider>();
+          final seedColor = appSettings.currentTheme.seedColor;
           return MaterialApp(
             title: '手もとメモ',
             debugShowCheckedModeBanner: false,
             locale: const Locale('ja', 'JP'),
+            themeMode: appSettings.darkModeEnabled
+                ? ThemeMode.dark
+                : ThemeMode.light,
             theme: ThemeData(
               colorScheme: ColorScheme.fromSeed(seedColor: seedColor),
               scaffoldBackgroundColor: Colors.white,
@@ -72,6 +73,7 @@ class MemoApp extends StatelessWidget {
                 seedColor: seedColor,
                 brightness: Brightness.dark,
               ),
+              scaffoldBackgroundColor: Colors.black,
               useMaterial3: true,
             ),
             home: const _AppLockGate(child: _AppEntryPoint()),

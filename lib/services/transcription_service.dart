@@ -132,7 +132,12 @@ class TranscriptionService {
 
       final resultJson = await recognizer.getFinalResult();
       final decoded = jsonDecode(resultJson) as Map<String, dynamic>;
-      return (decoded['text'] as String?)?.trim() ?? '';
+      final text = (decoded['text'] as String?)?.trim() ?? '';
+      // Vosk は認識した単語をスペース区切りで返す(英語などの分かち書き
+      // 言語向けの挙動)。日本語は単語間にスペースを入れないため、その
+      // ままだと不自然な空白だらけの文になる。ここで取り除いて自然な
+      // 文にする。
+      return text.replaceAll(' ', '');
     } finally {
       await recognizer.dispose();
     }

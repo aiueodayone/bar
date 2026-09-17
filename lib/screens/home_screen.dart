@@ -102,9 +102,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
           ),
-          if (!adsRemoved) const BannerAdWidget(),
         ],
       ),
+      // バナー広告は body の Column に含めず bottomNavigationBar に置く。
+      // こうすると Scaffold が FloatingActionButton をその上に自動で
+      // 余白を取って配置してくれるので、「+」ボタンが広告と重なる問題が
+      // 起きない(body 内に広告を置くと、FAB は body の座標系ではなく
+      // Scaffold 全体を基準に浮くため、広告と重なってしまう)。
+      bottomNavigationBar: adsRemoved ? null : const BannerAdWidget(),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => const MemoEditScreen())),

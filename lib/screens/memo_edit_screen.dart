@@ -475,9 +475,12 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: _buildAudioSection(context),
             ),
-            if (!adsRemoved) const BannerAdWidget(),
           ],
         ),
+        // body の Column ではなく bottomNavigationBar に置く。録音ボタンの
+        // すぐ下に固定表示されつつ、Scaffold のレイアウト計算に乗るため、
+        // 広告の読み込みタイミングで録音ボタンの位置がずれることもない。
+        bottomNavigationBar: adsRemoved ? null : const BannerAdWidget(),
       ),
     );
   }

@@ -30,11 +30,15 @@ class AppSettingsProvider extends ChangeNotifier {
   AppTheme _currentTheme = findThemeById(kDefaultThemeId);
   AppTheme get currentTheme => _currentTheme;
 
+  bool _darkModeEnabled = false;
+  bool get darkModeEnabled => _darkModeEnabled;
+
   Future<void> init() async {
     _adsRemoved = await _settingsService.isAdsRemoved();
     _themesUnlocked = await _settingsService.isThemesUnlocked();
     final themeId = await _settingsService.getSelectedThemeId();
     _currentTheme = findThemeById(themeId);
+    _darkModeEnabled = await _settingsService.isDarkModeEnabled();
     notifyListeners();
 
     await _purchaseService.initialize();
@@ -60,6 +64,12 @@ class AppSettingsProvider extends ChangeNotifier {
     if (theme.isPremium && !_themesUnlocked) return;
     _currentTheme = theme;
     await _settingsService.setSelectedThemeId(theme.id);
+    notifyListeners();
+  }
+
+  Future<void> setDarkModeEnabled(bool value) async {
+    _darkModeEnabled = value;
+    await _settingsService.setDarkModeEnabled(value);
     notifyListeners();
   }
 

@@ -16,7 +16,8 @@ class ThemeSelectionScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (!settings.themesUnlocked) ...[
+          if (kAppThemes.any((t) => t.isPremium) &&
+              !settings.themesUnlocked) ...[
             Card(
               color: Theme.of(context).colorScheme.primaryContainer,
               child: Padding(

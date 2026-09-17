@@ -8,6 +8,7 @@ class SettingsService {
   static const String _keyOnboardingSeen = 'onboarding_seen';
   static const String _keySelectedThemeId = 'selected_theme_id';
   static const String _keyThemesUnlocked = 'themes_unlocked';
+  static const String _keyDarkModeEnabled = 'dark_mode_enabled';
 
   Future<bool> isAdsRemoved() async {
     final prefs = await SharedPreferences.getInstance();
@@ -47,5 +48,15 @@ class SettingsService {
   Future<void> setThemesUnlocked(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyThemesUnlocked, value);
+  }
+
+  Future<bool> isDarkModeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyDarkModeEnabled) ?? false;
+  }
+
+  Future<void> setDarkModeEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyDarkModeEnabled, value);
   }
 }

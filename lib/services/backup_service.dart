@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -37,10 +38,63 @@ class InvalidBackupFileException implements Exception {
   String toString() => message;
 }
 
+/// バックアップの中身(メモの文面や録音)をそのまま覗き見できないように
+/// するための固定鍵。ユーザーにパスワードを求めない代わりに、アプリに
+/// 埋め込まれたこの鍵で自動的に暗号化・復号する。
+///
+/// 注意: この鍵はアプリ本体に同梱されているため、アプリを解析すれば
+/// 取り出せてしまう。これは「クラウドストレージに置いた際に、たまたま
+/// アクセスできた他人がバックアップの JSON をそのまま読めてしまう」
+/// ような偶発的な閲覧を防ぐための軽い保護であり、本気で狙われた場合の
+/// 秘匿性まで保証するものではない。
+const List<int> _backupEncryptionKeyBytes = [
+  0x89,
+  0x1b,
+  0x3d,
+  0x11,
+  0x7e,
+  0x70,
+  0xe0,
+  0xc3,
+  0xf6,
+  0x48,
+  0xa1,
+  0x9a,
+  0x6e,
+  0x4c,
+  0x22,
+  0xee,
+  0x8f,
+  0xc0,
+  0xc6,
+  0x6e,
+  0xbd,
+  0xbf,
+  0x6f,
+  0x3c,
+  0x0f,
+  0x11,
+  0xf1,
+  0x21,
+  0x24,
+  0x89,
+  0x76,
+  0x47,
+];
+
+/// 暗号化バックアップの先頭に付けるマジックバイト列 ("TMEB" =
+/// TeMoto-memo Encrypted Backup)。この4バイトで、暗号化前の旧形式の
+/// 素の ZIP (先頭は常に "PK")と区別する。
+const List<int> _encryptedBackupMagic = [0x54, 0x4D, 0x45, 0x42];
+const int _encryptionFormatVersion = 1;
+
 /// メモ・ジャンル・録音データをまとめてバックアップ/復元するサービス。
 ///
-/// バックアップは ZIP ファイル1つにまとめる: メモ・ジャンルのデータは
-/// backup.json、録音ファイルは audio/ フォルダ以下にそのまま含める。
+/// バックアップの中身は ZIP ファイル1つにまとめる: メモ・ジャンルの
+/// データは backup.json、録音ファイルは audio/ フォルダ以下にそのまま
+/// 含める。この ZIP 全体を、アプリに埋め込まれた固定鍵で AES-256-GCM
+/// 暗号化してから保存する(ユーザーにパスワードの入力・管理を求めない)。
+///
 /// 復元は既存データを削除せず、同じ ID のものは上書き、無いものは追加する
 /// (マージ)。誤って新しいメモを消してしまうことがないようにするため。
 class BackupService {
@@ -53,8 +107,8 @@ class BackupService {
   final MemoRepository _memoRepository;
   final GenreRepository _genreRepository;
 
-  /// 全メモ・ジャンル・録音ファイルをまとめた ZIP バックアップを作成し、
-  /// そのバイト列とファイル名を返す。
+  /// 全メモ・ジャンル・録音ファイルをまとめた暗号化済みバックアップを
+  /// 作成し、そのバイト列とファイル名を返す。
   ///
   /// 共有シート(share_plus)は使わない: LINE や SNS などの「送信先」も
   /// 選択肢に並んでしまい、誤ってメモの中身を他人に送ってしまうリスクが
@@ -110,22 +164,30 @@ class BackupService {
       throw StateError('バックアップの作成に失敗しました');
     }
 
+    final encrypted = await _encryptBytes(zipBytes);
     final fileName =
-        'temotomemo_backup_${DateTime.now().millisecondsSinceEpoch}.zip';
-    return (Uint8List.fromList(zipBytes), fileName);
+        'temotomemo_backup_${DateTime.now().millisecondsSinceEpoch}.tmbackup';
+    return (encrypted, fileName);
   }
 
-  /// バックアップ ZIP ファイル(のバイト列)からメモ・ジャンル・録音データを
+  /// バックアップファイル(のバイト列)からメモ・ジャンル・録音データを
   /// 復元する。戻り値は (復元したメモ件数, 復元したジャンル件数)。
   ///
   /// ファイルパスではなくバイト列を受け取る: Android では file_picker が
   /// 選択結果を `content://` の URI で返すことがあり、その場合
   /// `PlatformFile.path` は null になるため、常に `readAsBytes()` 経由で
   /// 読み込む方が確実。
+  ///
+  /// 暗号化前の旧バージョンで作られた素の ZIP バックアップもそのまま
+  /// 復元できる(マジックバイトが無ければ暗号化されていないとみなす)。
   Future<(int, int)> restoreFromBackup(Uint8List bytes) async {
+    final zipBytes = _looksEncrypted(bytes)
+        ? await _decryptBytes(bytes)
+        : bytes;
+
     final Archive archive;
     try {
-      archive = ZipDecoder().decodeBytes(bytes);
+      archive = ZipDecoder().decodeBytes(zipBytes);
     } catch (_) {
       throw const InvalidBackupFileException('このファイルはバックアップとして読み取れませんでした');
     }
@@ -196,6 +258,66 @@ class BackupService {
     }
 
     return (memosJson.length, genresJson.length);
+  }
+
+  bool _looksEncrypted(Uint8List bytes) {
+    if (bytes.length < _encryptedBackupMagic.length) return false;
+    for (var i = 0; i < _encryptedBackupMagic.length; i++) {
+      if (bytes[i] != _encryptedBackupMagic[i]) return false;
+    }
+    return true;
+  }
+
+  /// コンテナ形式: マジック(4) + フォーマットバージョン(1) + nonce(12) +
+  /// MAC(16) + 暗号文。固定鍵なので salt は不要。
+  Future<Uint8List> _encryptBytes(List<int> plainBytes) async {
+    final secretKey = SecretKey(_backupEncryptionKeyBytes);
+    final secretBox = await AesGcm.with256bits().encrypt(
+      plainBytes,
+      secretKey: secretKey,
+    );
+
+    return Uint8List.fromList([
+      ..._encryptedBackupMagic,
+      _encryptionFormatVersion,
+      ...secretBox.nonce,
+      ...secretBox.mac.bytes,
+      ...secretBox.cipherText,
+    ]);
+  }
+
+  Future<Uint8List> _decryptBytes(Uint8List bytes) async {
+    try {
+      var offset = _encryptedBackupMagic.length;
+      final version = bytes[offset];
+      offset += 1;
+      if (version != _encryptionFormatVersion) {
+        throw UnsupportedBackupVersionException(
+          'このバックアップ(暗号化形式バージョン $version)は、お使いのアプリより'
+          '新しい形式です。アプリを最新版に更新してからお試しください。',
+        );
+      }
+
+      const nonceLength = 12;
+      const macLength = 16;
+      final nonce = bytes.sublist(offset, offset + nonceLength);
+      offset += nonceLength;
+      final mac = bytes.sublist(offset, offset + macLength);
+      offset += macLength;
+      final cipherText = bytes.sublist(offset);
+
+      final secretKey = SecretKey(_backupEncryptionKeyBytes);
+      final secretBox = SecretBox(cipherText, nonce: nonce, mac: Mac(mac));
+      final plainBytes = await AesGcm.with256bits().decrypt(
+        secretBox,
+        secretKey: secretKey,
+      );
+      return Uint8List.fromList(plainBytes);
+    } on UnsupportedBackupVersionException {
+      rethrow;
+    } catch (_) {
+      throw const InvalidBackupFileException('バックアップファイルの内容を読み取れませんでした');
+    }
   }
 
   Future<Directory> _voiceMemosDirectory() async {

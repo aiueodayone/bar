@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../data/genre_repository.dart';
 import '../data/memo_repository.dart';
+import '../models/app_theme.dart';
 import '../providers/app_lock_provider.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/genre_provider.dart';
@@ -42,9 +43,9 @@ class SettingsScreen extends StatelessWidget {
         dialogTitle: 'バックアップの保存先を選択',
         fileName: fileName,
         bytes: bytes,
-        mimeType: 'application/zip',
+        mimeType: 'application/octet-stream',
         type: FileType.custom,
-        allowedExtensions: ['zip'],
+        allowedExtensions: ['tmbackup'],
       );
       if (!context.mounted) return;
       if (savedUri != null) {
@@ -62,7 +63,8 @@ class SettingsScreen extends StatelessWidget {
       picked = await FilePicker.pickFile(
         dialogTitle: 'バックアップファイルを選択',
         type: FileType.custom,
-        allowedExtensions: ['zip'],
+        // 'zip' は暗号化対応前の旧バージョンで作られたバックアップ用。
+        allowedExtensions: ['tmbackup', 'zip'],
       );
     } catch (_) {
       if (!context.mounted) return;
@@ -218,13 +220,24 @@ class SettingsScreen extends StatelessWidget {
             ),
             title: const Text('テーマ(着せ替え)'),
             subtitle: Text(
-              settings.themesUnlocked
-                  ? '${settings.currentTheme.name} を使用中'
-                  : '無料テーマ + 買い切りで追加テーマを解放',
+              kAppThemes.any((t) => t.isPremium) && !settings.themesUnlocked
+                  ? '無料テーマ + 買い切りで追加テーマを解放'
+                  : '${settings.currentTheme.name} を使用中',
             ),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ThemeSelectionScreen()),
             ),
+          ),
+          SwitchListTile(
+            secondary: Icon(
+              settings.darkModeEnabled
+                  ? Icons.dark_mode_outlined
+                  : Icons.light_mode_outlined,
+            ),
+            title: const Text('ダークモード'),
+            subtitle: Text(settings.darkModeEnabled ? '黒背景で表示中' : '白背景で表示中'),
+            value: settings.darkModeEnabled,
+            onChanged: settings.setDarkModeEnabled,
           ),
           ListTile(
             leading: const Icon(Icons.ios_share),
