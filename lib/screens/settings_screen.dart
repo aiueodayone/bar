@@ -30,7 +30,23 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _createBackup(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await BackupService().createAndShareBackup();
+      final (bytes, fileName) = await BackupService().createBackupBytes();
+      // 共有シートではなく「保存先を選ぶ」ダイアログ(SAF の
+      // ACTION_CREATE_DOCUMENT)を使う。ここには Google ドライブや端末の
+      // ストレージなど保存先のみが並び、LINE 等のメッセージ/SNSアプリは
+      // 選択肢に出てこないため、誤って他人に送ってしまう心配がない。
+      final savedUri = await FilePicker.saveFile(
+        dialogTitle: 'バックアップの保存先を選択',
+        fileName: fileName,
+        bytes: bytes,
+        mimeType: 'application/zip',
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+      if (!context.mounted) return;
+      if (savedUri != null) {
+        messenger.showSnackBar(const SnackBar(content: Text('バックアップを保存しました')));
+      }
     } catch (_) {
       if (!context.mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text('バックアップの作成に失敗しました')));
@@ -152,7 +168,7 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.backup_outlined),
             title: const Text('バックアップを作成'),
-            subtitle: const Text('メモ・ジャンル・録音データをまとめて書き出して共有します'),
+            subtitle: const Text('メモ・ジャンル・録音データをまとめて保存先を選んで保存します'),
             onTap: () => _createBackup(context),
           ),
           ListTile(

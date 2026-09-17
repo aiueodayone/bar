@@ -6,7 +6,6 @@ import 'package:archive/archive_io.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../data/genre_repository.dart';
 import '../data/memo_repository.dart';
@@ -55,8 +54,16 @@ class BackupService {
   final GenreRepository _genreRepository;
 
   /// 全メモ・ジャンル・録音ファイルをまとめた ZIP バックアップを作成し、
-  /// 共有シート経由で保存できるようにする。
-  Future<void> createAndShareBackup() async {
+  /// そのバイト列とファイル名を返す。
+  ///
+  /// 共有シート(share_plus)は使わない: LINE や SNS などの「送信先」も
+  /// 選択肢に並んでしまい、誤ってメモの中身を他人に送ってしまうリスクが
+  /// ある。呼び出し側では代わりに `FilePicker.saveFile()`
+  /// (Android の ACTION_CREATE_DOCUMENT = 「保存先を選ぶ」ダイアログ)を
+  /// 使うこと。これは Google ドライブや端末のストレージなど保存先のみが
+  /// 並ぶ SAF の仕組みで、LINE 等のメッセージアプリは
+  /// DocumentsProvider を実装していないため選択肢に出てこない。
+  Future<(Uint8List, String)> createBackupBytes() async {
     final genres = await _genreRepository.fetchGenres();
     final memos = await _memoRepository.fetchMemos();
 
@@ -103,15 +110,9 @@ class BackupService {
       throw StateError('バックアップの作成に失敗しました');
     }
 
-    final tmpDir = await getTemporaryDirectory();
     final fileName =
         'temotomemo_backup_${DateTime.now().millisecondsSinceEpoch}.zip';
-    final zipFile = File(p.join(tmpDir.path, fileName));
-    await zipFile.writeAsBytes(zipBytes);
-
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(zipFile.path)], subject: '手もとメモ バックアップ'),
-    );
+    return (Uint8List.fromList(zipBytes), fileName);
   }
 
   /// バックアップ ZIP ファイル(のバイト列)からメモ・ジャンル・録音データを
