@@ -49,8 +49,10 @@ dependencies:
   # Export / share
   share_plus: ^13.3.0
 
-  # Backup / restore: pick a previously-saved backup .zip to restore from.
+  # Backup / restore: pick a previously-saved backup .zip to restore from,
+  # and optionally encrypt it with a user-chosen password.
   file_picker: ^13.1.0
+  cryptography: ^2.9.0
 
   # Utilities
   intl: ^0.20.3
