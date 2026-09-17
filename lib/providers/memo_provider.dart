@@ -10,7 +10,7 @@ import '../models/memo.dart';
 /// メモ一覧・検索・ジャンル絞り込みの状態を管理する。
 class MemoProvider extends ChangeNotifier {
   MemoProvider({MemoRepository? repository})
-      : _repository = repository ?? MemoRepository();
+    : _repository = repository ?? MemoRepository();
 
   final MemoRepository _repository;
   final _uuid = const Uuid();

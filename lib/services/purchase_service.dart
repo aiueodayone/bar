@@ -18,7 +18,7 @@ const String kThemePackProductId = 'premium_themes_pack';
 /// 追加のカラーテーマを使えるようにしたりするフリーミアムモデルを想定している。
 class PurchaseService {
   PurchaseService({SettingsService? settingsService})
-      : _settingsService = settingsService ?? SettingsService();
+    : _settingsService = settingsService ?? SettingsService();
 
   final SettingsService _settingsService;
   final InAppPurchase _iap = InAppPurchase.instance;
@@ -76,11 +76,10 @@ class PurchaseService {
 
   Future<void> restorePurchases() => _iap.restorePurchases();
 
-  Future<void> _handlePurchaseUpdates(
-    List<PurchaseDetails> purchases,
-  ) async {
+  Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      final unlocked = purchase.status == PurchaseStatus.purchased ||
+      final unlocked =
+          purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored;
 
       if (unlocked && purchase.productID == kRemoveAdsProductId) {

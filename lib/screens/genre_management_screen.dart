@@ -53,9 +53,7 @@ class GenreManagementScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('ジャンルを削除しますか?'),
-        content: Text(
-          '「${genre.name}」を削除します。このジャンルのメモは未分類になります。',
-        ),
+        content: Text('「${genre.name}」を削除します。このジャンルのメモは未分類になります。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -72,5 +70,4 @@ class GenreManagementScreen extends StatelessWidget {
       await genreProvider.deleteGenre(genre.id);
     }
   }
-
 }

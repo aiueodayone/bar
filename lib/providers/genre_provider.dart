@@ -7,7 +7,7 @@ import '../models/genre.dart';
 /// ジャンル一覧の状態を管理する。
 class GenreProvider extends ChangeNotifier {
   GenreProvider({GenreRepository? repository})
-      : _repository = repository ?? GenreRepository();
+    : _repository = repository ?? GenreRepository();
 
   final GenreRepository _repository;
   final _uuid = const Uuid();

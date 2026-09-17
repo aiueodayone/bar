@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 
 /// メモを分類するためのジャンル(カテゴリ)。
 class Genre {
-  Genre({
-    required this.id,
-    required this.name,
-    required this.color,
-  });
+  Genre({required this.id, required this.name, required this.color});
 
   factory Genre.fromMap(Map<String, Object?> map) {
     return Genre(
@@ -21,18 +17,10 @@ class Genre {
   final Color color;
 
   Map<String, Object?> toMap() {
-    return {
-      'id': id,
-      'name': name,
-      'color': color.toARGB32(),
-    };
+    return {'id': id, 'name': name, 'color': color.toARGB32()};
   }
 
   Genre copyWith({String? name, Color? color}) {
-    return Genre(
-      id: id,
-      name: name ?? this.name,
-      color: color ?? this.color,
-    );
+    return Genre(id: id, name: name ?? this.name, color: color ?? this.color);
   }
 }

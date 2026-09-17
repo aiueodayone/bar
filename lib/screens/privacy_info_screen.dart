@@ -51,11 +51,7 @@ class PrivacyInfoScreen extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
+  const _Section({required this.icon, required this.title, required this.body});
 
   final IconData icon;
   final String title;

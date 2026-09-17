@@ -7,7 +7,7 @@ import 'database_helper.dart';
 /// メモの永続化(検索・ジャンル絞り込みを含む)を担うリポジトリ。
 class MemoRepository {
   MemoRepository({DatabaseHelper? dbHelper})
-      : _dbHelper = dbHelper ?? DatabaseHelper.instance;
+    : _dbHelper = dbHelper ?? DatabaseHelper.instance;
 
   final DatabaseHelper _dbHelper;
 

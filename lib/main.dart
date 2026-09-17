@@ -51,8 +51,10 @@ class MemoApp extends StatelessWidget {
       ],
       child: Builder(
         builder: (context) {
-          final seedColor =
-              context.watch<AppSettingsProvider>().currentTheme.seedColor;
+          final seedColor = context
+              .watch<AppSettingsProvider>()
+              .currentTheme
+              .seedColor;
           return MaterialApp(
             title: '手もとメモ',
             debugShowCheckedModeBanner: false,
@@ -86,8 +88,8 @@ class _AppEntryPoint extends StatefulWidget {
 }
 
 class _AppEntryPointState extends State<_AppEntryPoint> {
-  late final Future<bool> _hasSeenOnboarding =
-      SettingsService().hasSeenOnboarding();
+  late final Future<bool> _hasSeenOnboarding = SettingsService()
+      .hasSeenOnboarding();
 
   @override
   Widget build(BuildContext context) {

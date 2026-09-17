@@ -62,10 +62,7 @@ class ExportService {
 
   /// 全メモをジャンルごとにまとめた1つのテキストファイルとして書き出し、
   /// 共有シート経由で保存・送信できるようにする。
-  Future<void> exportAllMemos(
-    List<Memo> memos,
-    List<Genre> genres,
-  ) async {
+  Future<void> exportAllMemos(List<Memo> memos, List<Genre> genres) async {
     final content = _buildExportText(memos, genres);
 
     final tmpDir = await getTemporaryDirectory();
@@ -75,10 +72,7 @@ class ExportService {
     await file.writeAsString(content);
 
     await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        subject: 'メモのエクスポート',
-      ),
+      ShareParams(files: [XFile(file.path)], subject: 'メモのエクスポート'),
     );
   }
 

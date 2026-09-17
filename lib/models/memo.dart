@@ -64,8 +64,9 @@ class Memo {
       content: content ?? this.content,
       genreId: clearGenre ? null : (genreId ?? this.genreId),
       audioPath: clearAudio ? null : (audioPath ?? this.audioPath),
-      audioDurationMs:
-          clearAudio ? null : (audioDurationMs ?? this.audioDurationMs),
+      audioDurationMs: clearAudio
+          ? null
+          : (audioDurationMs ?? this.audioDurationMs),
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

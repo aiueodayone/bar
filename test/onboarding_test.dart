@@ -9,9 +9,7 @@ void main() {
   });
 
   testWidgets('OnboardingScreen paginates through all pages', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: OnboardingScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: OnboardingScreen()));
 
     expect(find.text('録音もメモも、\nすべてあなたの端末の中だけ'), findsOneWidget);
     expect(find.text('次へ'), findsOneWidget);

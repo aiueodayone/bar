@@ -65,9 +65,7 @@ class ThemeSelectionScreen extends StatelessWidget {
                 onTap: () {
                   if (locked) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('このテーマはテーマパック購入後に使用できます'),
-                      ),
+                      const SnackBar(content: Text('このテーマはテーマパック購入後に使用できます')),
                     );
                     return;
                   }
@@ -92,10 +90,17 @@ class ThemeSelectionScreen extends StatelessWidget {
                             backgroundColor: theme.seedColor,
                             radius: 20,
                             child: locked
-                                ? const Icon(Icons.lock, color: Colors.white, size: 18)
+                                ? const Icon(
+                                    Icons.lock,
+                                    color: Colors.white,
+                                    size: 18,
+                                  )
                                 : (selected
-                                    ? const Icon(Icons.check, color: Colors.white)
-                                    : null),
+                                      ? const Icon(
+                                          Icons.check,
+                                          color: Colors.white,
+                                        )
+                                      : null),
                           ),
                           const SizedBox(height: 8),
                           Text(theme.name),
@@ -105,7 +110,11 @@ class ThemeSelectionScreen extends StatelessWidget {
                         const Positioned(
                           top: 4,
                           right: 4,
-                          child: Icon(Icons.star, size: 16, color: Colors.amber),
+                          child: Icon(
+                            Icons.star,
+                            size: 16,
+                            color: Colors.amber,
+                          ),
                         ),
                     ],
                   ),

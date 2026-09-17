@@ -10,7 +10,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('Locked premium theme shows a snackbar and does not select', (tester) async {
+  testWidgets('Locked premium theme shows a snackbar and does not select', (
+    tester,
+  ) async {
     final settings = AppSettingsProvider();
 
     await tester.pumpWidget(

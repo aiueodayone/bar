@@ -62,9 +62,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
           ),
         ],
       ),
@@ -76,9 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedGenreId: memoProvider.genreFilter,
             onSelected: memoProvider.setGenreFilter,
             onManageGenres: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const GenreManagementScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const GenreManagementScreen()),
             ),
           ),
           const SizedBox(height: 8),
@@ -86,31 +84,30 @@ class _HomeScreenState extends State<HomeScreen> {
             child: memoProvider.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : memoProvider.memos.isEmpty
-                    ? const _EmptyState()
-                    : ListView.separated(
-                        itemCount: memoProvider.memos.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final memo = memoProvider.memos[index];
-                          return MemoListItem(
-                            memo: memo,
-                            genre: genreProvider.byId(memo.genreId),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => MemoEditScreen(memoId: memo.id),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                ? const _EmptyState()
+                : ListView.separated(
+                    itemCount: memoProvider.memos.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final memo = memoProvider.memos[index];
+                      return MemoListItem(
+                        memo: memo,
+                        genre: genreProvider.byId(memo.genreId),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => MemoEditScreen(memoId: memo.id),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
           if (!adsRemoved) const BannerAdWidget(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const MemoEditScreen()),
-        ),
+        onPressed: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => const MemoEditScreen())),
         child: const Icon(Icons.add),
       ),
     );

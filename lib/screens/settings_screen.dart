@@ -16,9 +16,8 @@ class SettingsScreen extends StatelessWidget {
     final genres = await GenreRepository().fetchGenres();
     if (!context.mounted) return;
     if (memos.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('エクスポートするメモがありません')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('エクスポートするメモがありません')));
       return;
     }
     await ExportService().exportAllMemos(memos, genres);
@@ -31,9 +30,8 @@ class SettingsScreen extends StatelessWidget {
     // ことをフィードバックする(該当する購入があれば、このあと画面上の
     // 「広告は削除されています」等の表示が反応的に切り替わる)。
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('購入情報を確認しました')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('購入情報を確認しました')));
   }
 
   @override
@@ -51,7 +49,9 @@ class SettingsScreen extends StatelessWidget {
             ),
             title: const Text('テーマ(着せ替え)'),
             subtitle: Text(
-              settings.themesUnlocked ? '${settings.currentTheme.name} を使用中' : '無料テーマ + 買い切りで追加テーマを解放',
+              settings.themesUnlocked
+                  ? '${settings.currentTheme.name} を使用中'
+                  : '無料テーマ + 買い切りで追加テーマを解放',
             ),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ThemeSelectionScreen()),

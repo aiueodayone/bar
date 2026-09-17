@@ -9,8 +9,8 @@ class AppSettingsProvider extends ChangeNotifier {
   AppSettingsProvider({
     SettingsService? settingsService,
     PurchaseService? purchaseService,
-  })  : _settingsService = settingsService ?? SettingsService(),
-        _purchaseService = purchaseService ?? PurchaseService();
+  }) : _settingsService = settingsService ?? SettingsService(),
+       _purchaseService = purchaseService ?? PurchaseService();
 
   final SettingsService _settingsService;
   final PurchaseService _purchaseService;

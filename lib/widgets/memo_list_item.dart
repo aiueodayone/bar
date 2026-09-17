@@ -34,13 +34,11 @@ class MemoListItem extends StatelessWidget {
           size: 20,
         ),
       ),
-      title: Text(
-        displayTitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        memo.title.isNotEmpty && preview.isNotEmpty ? preview : dateFormat.format(memo.updatedAt),
+        memo.title.isNotEmpty && preview.isNotEmpty
+            ? preview
+            : dateFormat.format(memo.updatedAt),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),

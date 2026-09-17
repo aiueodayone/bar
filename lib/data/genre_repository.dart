@@ -4,7 +4,7 @@ import 'database_helper.dart';
 /// ジャンル(カテゴリ)の永続化を担うリポジトリ。
 class GenreRepository {
   GenreRepository({DatabaseHelper? dbHelper})
-      : _dbHelper = dbHelper ?? DatabaseHelper.instance;
+    : _dbHelper = dbHelper ?? DatabaseHelper.instance;
 
   final DatabaseHelper _dbHelper;
 
@@ -16,10 +16,7 @@ class GenreRepository {
 
   Future<void> upsertGenre(Genre genre, {int sortOrder = 0}) async {
     final db = await _dbHelper.database;
-    await db.insert('genres', {
-      ...genre.toMap(),
-      'sort_order': sortOrder,
-    });
+    await db.insert('genres', {...genre.toMap(), 'sort_order': sortOrder});
   }
 
   Future<void> updateGenre(Genre genre) async {
@@ -39,8 +36,7 @@ class GenreRepository {
 
   Future<int> nextSortOrder() async {
     final db = await _dbHelper.database;
-    final result =
-        await db.rawQuery('SELECT MAX(sort_order) AS m FROM genres');
+    final result = await db.rawQuery('SELECT MAX(sort_order) AS m FROM genres');
     final max = result.first['m'] as int?;
     return (max ?? -1) + 1;
   }
