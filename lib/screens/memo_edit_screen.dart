@@ -158,6 +158,29 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     });
   }
 
+  Future<void> _confirmDeleteAudio() async {
+    if (_audioPath == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('録音を削除しますか?'),
+        content: const Text('この操作は取り消せません。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    await _deleteAudio();
+  }
+
   Future<void> _deleteAudio() async {
     if (_audioPath == null) return;
     await _playbackService.stop();
@@ -355,6 +378,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('このメモを削除しますか?'),
+        content: const Text('この操作は取り消せません。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -532,7 +556,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline),
-                    onPressed: _deleteAudio,
+                    tooltip: '録音を削除',
+                    onPressed: _confirmDeleteAudio,
                   ),
                 ],
               ),
