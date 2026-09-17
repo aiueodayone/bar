@@ -46,8 +46,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   bool _isRecording = false;
 
   bool _isPlaying = false;
-  Duration _playbackPosition = Duration.zero;
-  Duration _playbackDuration = Duration.zero;
+  StreamSubscription<void>? _playbackCompleteSub;
 
   bool _isTranscribing = false;
   bool _isDownloadingModel = false;
@@ -57,13 +56,9 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   void initState() {
     super.initState();
     _load();
-    _playbackService.onPositionChanged.listen((pos) {
-      if (mounted) setState(() => _playbackPosition = pos);
-    });
-    _playbackService.onDurationChanged.listen((dur) {
-      if (mounted) setState(() => _playbackDuration = dur);
-    });
-    _playbackService.onComplete.listen((_) {
+    // 再生位置(onPositionChanged)は高頻度に更新されるため、画面全体を
+    // 再ビルドしないよう _PlaybackSlider 側で個別に購読・保持する。
+    _playbackCompleteSub = _playbackService.onComplete.listen((_) {
       if (mounted) setState(() => _isPlaying = false);
     });
   }
@@ -90,6 +85,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
   @override
   void dispose() {
+    _playbackCompleteSub?.cancel();
     if (!_saved && _audioPath != null && _audioPath != _initialAudioPath) {
       _audioService.deleteFile(_audioPath!);
     }
@@ -498,22 +494,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                     onPressed: _togglePlayback,
                   ),
                   Expanded(
-                    child: Slider(
-                      value: _playbackPosition.inMilliseconds
-                          .clamp(
-                            0,
-                            _playbackDuration.inMilliseconds == 0
-                                ? 1
-                                : _playbackDuration.inMilliseconds,
-                          )
-                          .toDouble(),
-                      max: _playbackDuration.inMilliseconds == 0
-                          ? 1
-                          : _playbackDuration.inMilliseconds.toDouble(),
-                      onChanged: (v) => _playbackService.seek(
-                        Duration(milliseconds: v.toInt()),
-                      ),
-                    ),
+                    child: _PlaybackSlider(playbackService: _playbackService),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline),
@@ -640,6 +621,53 @@ class _RecordingControlsState extends State<_RecordingControls> {
         const SizedBox(height: 8),
         RecordingWaveform(levels: _waveformLevels),
       ],
+    );
+  }
+}
+
+/// 再生位置バー。onPositionChanged は再生中高頻度に発火するため、
+/// [MemoEditScreen] 全体ではなくこの小さなウィジェットだけを再ビルドする。
+class _PlaybackSlider extends StatefulWidget {
+  const _PlaybackSlider({required this.playbackService});
+
+  final PlaybackService playbackService;
+
+  @override
+  State<_PlaybackSlider> createState() => _PlaybackSliderState();
+}
+
+class _PlaybackSliderState extends State<_PlaybackSlider> {
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _positionSub = widget.playbackService.onPositionChanged.listen((pos) {
+      if (mounted) setState(() => _position = pos);
+    });
+    _durationSub = widget.playbackService.onDurationChanged.listen((dur) {
+      if (mounted) setState(() => _duration = dur);
+    });
+  }
+
+  @override
+  void dispose() {
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxMs = _duration.inMilliseconds == 0 ? 1 : _duration.inMilliseconds;
+    return Slider(
+      value: _position.inMilliseconds.clamp(0, maxMs).toDouble(),
+      max: maxMs.toDouble(),
+      onChanged: (v) =>
+          widget.playbackService.seek(Duration(milliseconds: v.toInt())),
     );
   }
 }
