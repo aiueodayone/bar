@@ -142,9 +142,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('録音を開始できませんでした: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('録音を開始できませんでした: $e')));
       }
     }
   }
@@ -227,9 +226,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         );
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('モデルのダウンロードに失敗しました: $e')),
-          );
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('モデルのダウンロードに失敗しました: $e')));
         }
         setState(() => _isDownloadingModel = false);
         return;
@@ -247,15 +245,13 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
           offset: _contentController.text.length,
         );
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文字起こし結果が空でした')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('文字起こし結果が空でした')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('文字起こしに失敗しました: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('文字起こしに失敗しました: $e')));
       }
     } finally {
       if (mounted) setState(() => _isTranscribing = false);
@@ -393,83 +389,91 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
     final genreProvider = context.watch<GenreProvider>();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.memoId == null ? '新規メモ' : 'メモを編集'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.ios_share),
-            tooltip: '共有',
-            onPressed: _shareMemo,
-          ),
-          if (widget.memoId != null)
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        // 戻る操作(システムのバックジェスチャー・戻るボタン)でも、
+        // チェックマークをタップしたのと同じように保存する。そうしないと
+        // 「保存し忘れて戻ったら内容が消えていた」という事故になりうる。
+        _save();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.memoId == null ? '新規メモ' : 'メモを編集'),
+          actions: [
             IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _delete,
+              icon: const Icon(Icons.ios_share),
+              tooltip: '共有',
+              onPressed: _shareMemo,
             ),
-          IconButton(
-            icon: const Icon(Icons.check),
-            onPressed: _save,
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              ChoiceChip(
-                label: const Text('未分類'),
-                selected: _selectedGenreId == null,
-                onSelected: (_) => setState(() => _selectedGenreId = null),
+            if (widget.memoId != null)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                onPressed: _delete,
               ),
-              for (final genre in genreProvider.genres)
+            IconButton(icon: const Icon(Icons.check), onPressed: _save),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
                 ChoiceChip(
-                  avatar: CircleAvatar(backgroundColor: genre.color, radius: 6),
-                  label: Text(genre.name),
-                  selected: _selectedGenreId == genre.id,
-                  onSelected: (_) =>
-                      setState(() => _selectedGenreId = genre.id),
+                  label: const Text('未分類'),
+                  selected: _selectedGenreId == null,
+                  onSelected: (_) => setState(() => _selectedGenreId = null),
                 ),
-              ActionChip(
-                avatar: const Icon(Icons.add, size: 16),
-                label: const Text('新規ジャンル'),
-                onPressed: () async {
-                  final created = await showGenreEditDialog(context);
-                  if (created != null && mounted) {
-                    setState(() => _selectedGenreId = created.id);
-                  }
-                },
+                for (final genre in genreProvider.genres)
+                  ChoiceChip(
+                    avatar: CircleAvatar(
+                      backgroundColor: genre.color,
+                      radius: 6,
+                    ),
+                    label: Text(genre.name),
+                    selected: _selectedGenreId == genre.id,
+                    onSelected: (_) =>
+                        setState(() => _selectedGenreId = genre.id),
+                  ),
+                ActionChip(
+                  avatar: const Icon(Icons.add, size: 16),
+                  label: const Text('新規ジャンル'),
+                  onPressed: () async {
+                    final created = await showGenreEditDialog(context);
+                    if (created != null && mounted) {
+                      setState(() => _selectedGenreId = created.id);
+                    }
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                hintText: 'タイトル',
+                border: InputBorder.none,
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _titleController,
-            decoration: const InputDecoration(
-              hintText: 'タイトル',
-              border: InputBorder.none,
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const Divider(),
-          TextField(
-            controller: _contentController,
-            decoration: const InputDecoration(
-              hintText: '内容を入力…',
-              border: InputBorder.none,
+            const Divider(),
+            TextField(
+              controller: _contentController,
+              decoration: const InputDecoration(
+                hintText: '内容を入力…',
+                border: InputBorder.none,
+              ),
+              maxLines: null,
+              minLines: 6,
             ),
-            maxLines: null,
-            minLines: 6,
-          ),
-          const SizedBox(height: 16),
-          _buildAudioSection(context),
-        ],
+            const SizedBox(height: 16),
+            _buildAudioSection(context),
+          ],
+        ),
       ),
     );
   }
@@ -502,22 +506,28 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
               Row(
                 children: [
                   IconButton(
-                    icon: Icon(_isPlaying ? Icons.pause_circle : Icons.play_circle),
+                    icon: Icon(
+                      _isPlaying ? Icons.pause_circle : Icons.play_circle,
+                    ),
                     iconSize: 36,
                     onPressed: _togglePlayback,
                   ),
                   Expanded(
                     child: Slider(
                       value: _playbackPosition.inMilliseconds
-                          .clamp(0, _playbackDuration.inMilliseconds == 0
-                              ? 1
-                              : _playbackDuration.inMilliseconds)
+                          .clamp(
+                            0,
+                            _playbackDuration.inMilliseconds == 0
+                                ? 1
+                                : _playbackDuration.inMilliseconds,
+                          )
                           .toDouble(),
                       max: _playbackDuration.inMilliseconds == 0
                           ? 1
                           : _playbackDuration.inMilliseconds.toDouble(),
-                      onChanged: (v) =>
-                          _playbackService.seek(Duration(milliseconds: v.toInt())),
+                      onChanged: (v) => _playbackService.seek(
+                        Duration(milliseconds: v.toInt()),
+                      ),
                     ),
                   ),
                   IconButton(
