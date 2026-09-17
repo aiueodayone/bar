@@ -24,6 +24,18 @@ class SettingsScreen extends StatelessWidget {
     await ExportService().exportAllMemos(memos, genres);
   }
 
+  Future<void> _restorePurchases(BuildContext context) async {
+    final settings = context.read<AppSettingsProvider>();
+    await settings.restorePurchases();
+    // タップしても何も起きなかったように見えないよう、確認自体は完了した
+    // ことをフィードバックする(該当する購入があれば、このあと画面上の
+    // 「広告は削除されています」等の表示が反応的に切り替わる)。
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('購入情報を確認しました')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettingsProvider>();
@@ -85,7 +97,7 @@ class SettingsScreen extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.restore),
               title: const Text('購入を復元'),
-              onTap: () => settings.restorePurchases(),
+              onTap: () => _restorePurchases(context),
             ),
           ],
           const Divider(),
