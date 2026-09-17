@@ -32,6 +32,11 @@ class AudioService {
         encoder: AudioEncoder.wav,
         sampleRate: kAudioSampleRate,
         numChannels: 1,
+        // Bluetoothイヤホン/ヘッドセットが接続されていても、その内蔵マイクへ
+        // 録音を奪われないようにする(record パッケージはデフォルトで
+        // Bluetooth SCO 接続を試み、繋がっていればそちらを優先してしまう)。
+        // 本体のマイクで録音したいので無効化する。
+        androidConfig: AndroidRecordConfig(manageBluetooth: false),
       ),
       path: path,
     );
