@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -69,7 +70,16 @@ class MemoProvider extends ChangeNotifier {
   }
 
   Future<void> deleteMemo(String id) async {
+    // メモのDB行だけ消して録音ファイルを放置すると、削除するたびに
+    // 使われない .wav ファイルがストレージに溜まり続けてしまう。
+    final memo = await _repository.fetchMemoById(id);
     await _repository.deleteMemo(id);
+    if (memo != null && memo.hasAudio) {
+      final file = File(memo.audioPath!);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    }
     await load();
   }
 
