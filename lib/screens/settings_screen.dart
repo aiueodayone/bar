@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +11,6 @@ import '../providers/memo_provider.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
 import '../widgets/app_lock_setup_dialog.dart';
-import '../widgets/backup_password_dialog.dart';
 import '../widgets/simple_password_prompt_dialog.dart';
 import 'privacy_info_screen.dart';
 import 'theme_selection_screen.dart';
@@ -34,14 +31,9 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _createBackup(BuildContext context) async {
-    final password = await showBackupPasswordSetupDialog(context);
-    if (password == null) return; // キャンセル
-    if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final (bytes, fileName) = await BackupService().createBackupBytes(
-        password: password.isEmpty ? null : password,
-      );
+      final (bytes, fileName) = await BackupService().createBackupBytes();
       // 共有シートではなく「保存先を選ぶ」ダイアログ(SAF の
       // ACTION_CREATE_DOCUMENT)を使う。ここには Google ドライブや端末の
       // ストレージなど保存先のみが並び、LINE 等のメッセージ/SNSアプリは
@@ -50,16 +42,16 @@ class SettingsScreen extends StatelessWidget {
         dialogTitle: 'バックアップの保存先を選択',
         fileName: fileName,
         bytes: bytes,
-        mimeType: password.isEmpty
-            ? 'application/zip'
-            : 'application/octet-stream',
+        mimeType: 'application/zip',
         type: FileType.custom,
-        allowedExtensions: [fileName.split('.').last],
+        allowedExtensions: ['zip'],
       );
+      if (!context.mounted) return;
       if (savedUri != null) {
         messenger.showSnackBar(const SnackBar(content: Text('バックアップを保存しました')));
       }
     } catch (_) {
+      if (!context.mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text('バックアップの作成に失敗しました')));
     }
   }
@@ -70,7 +62,7 @@ class SettingsScreen extends StatelessWidget {
       picked = await FilePicker.pickFile(
         dialogTitle: 'バックアップファイルを選択',
         type: FileType.custom,
-        allowedExtensions: ['zip', 'enc'],
+        allowedExtensions: ['zip'],
       );
     } catch (_) {
       if (!context.mounted) return;
@@ -79,23 +71,6 @@ class SettingsScreen extends StatelessWidget {
       return;
     }
     if (picked == null) return;
-
-    final Uint8List bytes;
-    try {
-      bytes = await picked.readAsBytes();
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('ファイルを読み込めませんでした')));
-      return;
-    }
-
-    String? password;
-    if (BackupService().isEncryptedBackup(bytes)) {
-      if (!context.mounted) return;
-      password = await showBackupPasswordPromptDialog(context);
-      if (password == null) return; // キャンセル
-    }
 
     if (!context.mounted) return;
     final confirmed = await showDialog<bool>(
@@ -126,17 +101,15 @@ class SettingsScreen extends StatelessWidget {
     final genreProvider = context.read<GenreProvider>();
 
     try {
+      final bytes = await picked.readAsBytes();
       final (memoCount, genreCount) = await BackupService().restoreFromBackup(
         bytes,
-        password: password,
       );
       await genreProvider.load();
       await memoProvider.load();
       messenger.showSnackBar(
         SnackBar(content: Text('メモ $memoCount 件、ジャンル $genreCount 件を復元しました')),
       );
-    } on WrongBackupPasswordException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } on UnsupportedBackupVersionException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } on InvalidBackupFileException catch (e) {
@@ -271,9 +244,7 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.backup_outlined),
             title: const Text('バックアップを作成'),
-            subtitle: const Text(
-              'メモ・ジャンル・録音データをまとめて保存先を選んで保存します(パスワードで暗号化も可能)',
-            ),
+            subtitle: const Text('メモ・ジャンル・録音データをまとめて保存先を選んで保存します'),
             onTap: () => _createBackup(context),
           ),
           ListTile(

@@ -49,9 +49,11 @@ dependencies:
   # Export / share
   share_plus: ^13.3.0
 
-  # Backup / restore: pick a previously-saved backup .zip to restore from,
-  # and optionally encrypt it with a user-chosen password.
+  # Backup / restore: pick a previously-saved backup .zip to restore from.
   file_picker: ^13.1.0
+
+  # App lock: PBKDF2 hashing for the app-open password / secret recovery
+  # password (AppLockService never stores the passwords themselves).
   cryptography: ^2.9.0
 
   # Utilities

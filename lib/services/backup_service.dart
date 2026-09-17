@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
-import 'package:cryptography/cryptography.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -39,44 +37,12 @@ class InvalidBackupFileException implements Exception {
   String toString() => message;
 }
 
-/// パスワードで保護されたバックアップなのに、パスワードが渡されなかった
-/// ときの例外。
-class BackupPasswordRequiredException implements Exception {
-  const BackupPasswordRequiredException(this.message);
-  final String message;
-  @override
-  String toString() => message;
-}
-
-/// バックアップの復元時にパスワードが違っていた(または内容が壊れていて
-/// 認証タグの検証に失敗した)ときの例外。
-class WrongBackupPasswordException implements Exception {
-  const WrongBackupPasswordException(this.message);
-  final String message;
-  @override
-  String toString() => message;
-}
-
-/// 暗号化バックアップの先頭に付けるマジックバイト列 ("TMEB" =
-/// TeMoto-memo Encrypted Backup)。この4バイトで、素の ZIP
-/// (先頭は常に "PK")と区別する。
-const List<int> _encryptedBackupMagic = [0x54, 0x4D, 0x45, 0x42];
-const int _encryptionFormatVersion = 1;
-const int _pbkdf2Iterations = 120000;
-const int _saltLength = 16;
-
 /// メモ・ジャンル・録音データをまとめてバックアップ/復元するサービス。
 ///
 /// バックアップは ZIP ファイル1つにまとめる: メモ・ジャンルのデータは
 /// backup.json、録音ファイルは audio/ フォルダ以下にそのまま含める。
 /// 復元は既存データを削除せず、同じ ID のものは上書き、無いものは追加する
 /// (マージ)。誤って新しいメモを消してしまうことがないようにするため。
-///
-/// パスワードを指定すると、この ZIP 全体を AES-256-GCM で暗号化する
-/// (鍵はパスワードから PBKDF2-HMAC-SHA256 で導出)。パスワード省略時は
-/// 今まで通り素の ZIP のまま。暗号化はあくまで「中身をそのまま読めなく
-/// する」ための軽い保護であり、パスワードを忘れると復元できなくなる点は
-/// UI 側で明示すること。
 class BackupService {
   BackupService({
     MemoRepository? memoRepository,
@@ -88,9 +54,7 @@ class BackupService {
   final GenreRepository _genreRepository;
 
   /// 全メモ・ジャンル・録音ファイルをまとめた ZIP バックアップを作成し、
-  /// そのバイト列とファイル名を返す。[password] を指定すると、その
-  /// パスワードで ZIP 全体を暗号化する(ファイル名も暗号化を示す
-  /// `.zip.enc` にする)。
+  /// そのバイト列とファイル名を返す。
   ///
   /// 共有シート(share_plus)は使わない: LINE や SNS などの「送信先」も
   /// 選択肢に並んでしまい、誤ってメモの中身を他人に送ってしまうリスクが
@@ -99,7 +63,7 @@ class BackupService {
   /// 使うこと。これは Google ドライブや端末のストレージなど保存先のみが
   /// 並ぶ SAF の仕組みで、LINE 等のメッセージアプリは
   /// DocumentsProvider を実装していないため選択肢に出てこない。
-  Future<(Uint8List, String)> createBackupBytes({String? password}) async {
+  Future<(Uint8List, String)> createBackupBytes() async {
     final genres = await _genreRepository.fetchGenres();
     final memos = await _memoRepository.fetchMemos();
 
@@ -146,24 +110,9 @@ class BackupService {
       throw StateError('バックアップの作成に失敗しました');
     }
 
-    final baseName =
-        'temotomemo_backup_${DateTime.now().millisecondsSinceEpoch}';
-    if (password == null || password.isEmpty) {
-      return (Uint8List.fromList(zipBytes), '$baseName.zip');
-    }
-    final encrypted = await _encryptBytes(zipBytes, password);
-    return (encrypted, '$baseName.zip.enc');
-  }
-
-  /// 渡されたバイト列が、[createBackupBytes] でパスワード付きで作った
-  /// 暗号化バックアップかどうかを判定する(復元前に、パスワード入力を
-  /// 求めるべきかどうかの判断に使う)。
-  bool isEncryptedBackup(Uint8List bytes) {
-    if (bytes.length < _encryptedBackupMagic.length) return false;
-    for (var i = 0; i < _encryptedBackupMagic.length; i++) {
-      if (bytes[i] != _encryptedBackupMagic[i]) return false;
-    }
-    return true;
+    final fileName =
+        'temotomemo_backup_${DateTime.now().millisecondsSinceEpoch}.zip';
+    return (Uint8List.fromList(zipBytes), fileName);
   }
 
   /// バックアップ ZIP ファイル(のバイト列)からメモ・ジャンル・録音データを
@@ -173,25 +122,10 @@ class BackupService {
   /// 選択結果を `content://` の URI で返すことがあり、その場合
   /// `PlatformFile.path` は null になるため、常に `readAsBytes()` 経由で
   /// 読み込む方が確実。
-  ///
-  /// [isEncryptedBackup] が true を返すバイト列を渡す場合は [password]
-  /// が必須。パスワードが違う(または内容が壊れている)場合は
-  /// [WrongBackupPasswordException] を投げる。
-  Future<(int, int)> restoreFromBackup(
-    Uint8List bytes, {
-    String? password,
-  }) async {
-    Uint8List zipBytes = bytes;
-    if (isEncryptedBackup(bytes)) {
-      if (password == null || password.isEmpty) {
-        throw const BackupPasswordRequiredException('このバックアップはパスワードで保護されています');
-      }
-      zipBytes = await _decryptBytes(bytes, password);
-    }
-
+  Future<(int, int)> restoreFromBackup(Uint8List bytes) async {
     final Archive archive;
     try {
-      archive = ZipDecoder().decodeBytes(zipBytes);
+      archive = ZipDecoder().decodeBytes(bytes);
     } catch (_) {
       throw const InvalidBackupFileException('このファイルはバックアップとして読み取れませんでした');
     }
@@ -262,75 +196,6 @@ class BackupService {
     }
 
     return (memosJson.length, genresJson.length);
-  }
-
-  Future<SecretKey> _deriveKey(String password, List<int> salt) {
-    final pbkdf2 = Pbkdf2.hmacSha256(iterations: _pbkdf2Iterations, bits: 256);
-    return pbkdf2.deriveKeyFromPassword(password: password, nonce: salt);
-  }
-
-  /// コンテナ形式: マジック(4) + フォーマットバージョン(1) + salt(16) +
-  /// nonce(12) + MAC(16) + 暗号文。全部固定長ヘッダなので長さを別途
-  /// 記録する必要がない。
-  Future<Uint8List> _encryptBytes(List<int> plainBytes, String password) async {
-    final random = Random.secure();
-    final salt = List<int>.generate(_saltLength, (_) => random.nextInt(256));
-    final secretKey = await _deriveKey(password, salt);
-    final secretBox = await AesGcm.with256bits().encrypt(
-      plainBytes,
-      secretKey: secretKey,
-    );
-
-    return Uint8List.fromList([
-      ..._encryptedBackupMagic,
-      _encryptionFormatVersion,
-      ...salt,
-      ...secretBox.nonce,
-      ...secretBox.mac.bytes,
-      ...secretBox.cipherText,
-    ]);
-  }
-
-  Future<Uint8List> _decryptBytes(Uint8List bytes, String password) async {
-    try {
-      var offset = _encryptedBackupMagic.length;
-      final version = bytes[offset];
-      offset += 1;
-      if (version != _encryptionFormatVersion) {
-        throw UnsupportedBackupVersionException(
-          'この暗号化バックアップ(形式バージョン $version)は、お使いのアプリより'
-          '新しい形式です。アプリを最新版に更新してからお試しください。',
-        );
-      }
-
-      const nonceLength = 12;
-      const macLength = 16;
-      final salt = bytes.sublist(offset, offset + _saltLength);
-      offset += _saltLength;
-      final nonce = bytes.sublist(offset, offset + nonceLength);
-      offset += nonceLength;
-      final mac = bytes.sublist(offset, offset + macLength);
-      offset += macLength;
-      final cipherText = bytes.sublist(offset);
-
-      final secretKey = await _deriveKey(password, salt);
-      final secretBox = SecretBox(cipherText, nonce: nonce, mac: Mac(mac));
-      try {
-        final plainBytes = await AesGcm.with256bits().decrypt(
-          secretBox,
-          secretKey: secretKey,
-        );
-        return Uint8List.fromList(plainBytes);
-      } on SecretBoxAuthenticationError {
-        throw const WrongBackupPasswordException('パスワードが正しくないか、ファイルが壊れています');
-      }
-    } on UnsupportedBackupVersionException {
-      rethrow;
-    } on WrongBackupPasswordException {
-      rethrow;
-    } catch (_) {
-      throw const InvalidBackupFileException('バックアップファイルの内容を読み取れませんでした');
-    }
   }
 
   Future<Directory> _voiceMemosDirectory() async {
