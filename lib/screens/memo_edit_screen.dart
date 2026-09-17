@@ -396,63 +396,82 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
             IconButton(icon: const Icon(Icons.check), onPressed: _save),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
+        body: Column(
           children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                ChoiceChip(
-                  label: const Text('未分類'),
-                  selected: _selectedGenreId == null,
-                  onSelected: (_) => setState(() => _selectedGenreId = null),
-                ),
-                for (final genre in genreProvider.genres)
-                  ChoiceChip(
-                    avatar: CircleAvatar(
-                      backgroundColor: genre.color,
-                      radius: 6,
-                    ),
-                    label: Text(genre.name),
-                    selected: _selectedGenreId == genre.id,
-                    onSelected: (_) =>
-                        setState(() => _selectedGenreId = genre.id),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('未分類'),
+                        selected: _selectedGenreId == null,
+                        onSelected: (_) =>
+                            setState(() => _selectedGenreId = null),
+                      ),
+                      for (final genre in genreProvider.genres)
+                        ChoiceChip(
+                          avatar: CircleAvatar(
+                            backgroundColor: genre.color,
+                            radius: 6,
+                          ),
+                          label: Text(genre.name),
+                          selected: _selectedGenreId == genre.id,
+                          onSelected: (_) =>
+                              setState(() => _selectedGenreId = genre.id),
+                        ),
+                      ActionChip(
+                        avatar: const Icon(Icons.add, size: 16),
+                        label: const Text('新規ジャンル'),
+                        onPressed: () async {
+                          final created = await showGenreEditDialog(context);
+                          if (created != null && mounted) {
+                            setState(() => _selectedGenreId = created.id);
+                          }
+                        },
+                      ),
+                    ],
                   ),
-                ActionChip(
-                  avatar: const Icon(Icons.add, size: 16),
-                  label: const Text('新規ジャンル'),
-                  onPressed: () async {
-                    final created = await showGenreEditDialog(context);
-                    if (created != null && mounted) {
-                      setState(() => _selectedGenreId = created.id);
-                    }
-                  },
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      hintText: 'タイトル',
+                      border: InputBorder.none,
+                    ),
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const Divider(),
+                ],
+              ),
+            ),
+            // 本文欄は外側を ListView にせず、ここだけ独立してスクロール
+            // させる。文字量が多いメモで、外側のスクロール領域の高さ計算に
+            // 本文の再レイアウトが毎回波及しないようにするため。
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _contentController,
+                  decoration: const InputDecoration(
+                    hintText: '内容を入力…',
+                    border: InputBorder.none,
+                  ),
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                hintText: 'タイトル',
-                border: InputBorder.none,
               ),
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const Divider(),
-            TextField(
-              controller: _contentController,
-              decoration: const InputDecoration(
-                hintText: '内容を入力…',
-                border: InputBorder.none,
-              ),
-              maxLines: null,
-              minLines: 6,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: _buildAudioSection(context),
             ),
-            const SizedBox(height: 16),
-            _buildAudioSection(context),
           ],
         ),
       ),
