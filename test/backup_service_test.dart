@@ -11,6 +11,8 @@ import 'package:memo_app/models/genre.dart';
 import 'package:memo_app/models/memo.dart';
 import 'package:memo_app/services/backup_service.dart';
 
+import 'support/db_test_utils.dart';
+
 /// テスト中だけ getApplicationDocumentsDirectory() を一時ディレクトリに
 /// 差し替える。実機・エミュレータなしで path_provider のプラットフォーム
 /// チャンネルを叩かせないようにするため。
@@ -32,6 +34,7 @@ void main() {
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('temoto_backup_test');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tempDir.path);
+    await clearMemoDatabase();
   });
 
   tearDown(() async {
@@ -86,5 +89,54 @@ void main() {
 
     final restoredGenres = await genreRepository.fetchGenres();
     expect(restoredGenres.map((g) => g.id), contains('g1'));
+  });
+
+  test('a memo with an audio recording round-trips through backup/restore '
+      'with the same audio bytes intact', () async {
+    final memoRepository = MemoRepository();
+    final genreRepository = GenreRepository();
+
+    // 元の録音ファイルは、復元先(voice_memos/)とは別の場所に置く。
+    // そうしないと「たまたま同じパスのまま」で通ってしまい、実際に
+    // バイト列がコピーされたことの確認にならない。
+    final sourceDir = await Directory('${tempDir.path}/original_recordings')
+        .create(recursive: true);
+    final originalAudioFile = File('${sourceDir.path}/voice_test.wav');
+    final audioBytes = List<int>.generate(200, (i) => i % 256);
+    await originalAudioFile.writeAsBytes(audioBytes);
+
+    final memo = Memo(
+      id: 'm-audio',
+      title: '音声メモ',
+      content: '',
+      audioPath: originalAudioFile.path,
+      audioDurationMs: 4200,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    await memoRepository.upsertMemo(memo);
+
+    final service = BackupService(
+      memoRepository: memoRepository,
+      genreRepository: genreRepository,
+    );
+    final (bytes, _) = await service.createBackupBytes();
+
+    // 復元前に元の録音を削除し、バックアップの中身から本当に
+    // 復元されていることを確認する(元ファイルが残っていて
+    // たまたま一致して見える、という誤検知を避ける)。
+    await originalAudioFile.delete();
+    await memoRepository.deleteMemo('m-audio');
+
+    await service.restoreFromBackup(bytes);
+
+    final restoredMemo = await memoRepository.fetchMemoById('m-audio');
+    expect(restoredMemo, isNotNull);
+    expect(restoredMemo!.hasAudio, isTrue);
+    expect(restoredMemo.audioDurationMs, 4200);
+
+    final restoredAudioFile = File(restoredMemo.audioPath!);
+    expect(await restoredAudioFile.exists(), isTrue);
+    expect(await restoredAudioFile.readAsBytes(), audioBytes);
   });
 }

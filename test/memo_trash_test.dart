@@ -4,9 +4,13 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:memo_app/data/memo_repository.dart';
 import 'package:memo_app/models/memo.dart';
 
+import 'support/db_test_utils.dart';
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
+
+  setUp(clearMemoDatabase);
 
   test('soft-deleted memos are hidden from fetchMemos, listed in '
       'fetchTrashedMemos, and reappear after restoreMemo', () async {
