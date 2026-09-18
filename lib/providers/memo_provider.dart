@@ -7,7 +7,11 @@ import 'package:uuid/uuid.dart';
 import '../data/memo_repository.dart';
 import '../models/memo.dart';
 
-/// メモ一覧・検索・ジャンル絞り込みの状態を管理する。
+/// ごみ箱に入れたメモを保持しておく期間。これを過ぎると自動的に完全削除
+/// される。
+const Duration kTrashRetention = Duration(days: 5);
+
+/// メモ一覧・検索・ジャンル絞り込み・ごみ箱の状態を管理する。
 class MemoProvider extends ChangeNotifier {
   MemoProvider({MemoRepository? repository})
     : _repository = repository ?? MemoRepository();
@@ -17,6 +21,9 @@ class MemoProvider extends ChangeNotifier {
 
   List<Memo> _memos = [];
   List<Memo> get memos => List.unmodifiable(_memos);
+
+  List<Memo> _trashedMemos = [];
+  List<Memo> get trashedMemos => List.unmodifiable(_trashedMemos);
 
   String? _genreFilter;
   String? get genreFilter => _genreFilter;
@@ -37,6 +44,11 @@ class MemoProvider extends ChangeNotifier {
       searchQuery: _searchQuery,
     );
     _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> loadTrash() async {
+    _trashedMemos = await _repository.fetchTrashedMemos();
     notifyListeners();
   }
 
@@ -69,9 +81,24 @@ class MemoProvider extends ChangeNotifier {
     await load();
   }
 
-  Future<void> deleteMemo(String id) async {
-    // メモのDB行だけ消して録音ファイルを放置すると、削除するたびに
-    // 使われない .wav ファイルがストレージに溜まり続けてしまう。
+  /// メモをごみ箱に移動する(すぐには消えず、[kTrashRetention] の間は
+  /// 「削除済み」から復元できる)。
+  Future<void> deleteMemo(String id) => moveToTrash([id]);
+
+  /// 一覧画面での複数選択削除用。
+  Future<void> moveToTrash(List<String> ids) async {
+    await _repository.softDeleteMemos(ids);
+    await load();
+  }
+
+  Future<void> restoreFromTrash(String id) async {
+    await _repository.restoreMemo(id);
+    await loadTrash();
+    await load();
+  }
+
+  /// ごみ箱から完全に削除する(録音ファイルも削除する)。取り消せない。
+  Future<void> permanentlyDelete(String id) async {
     final memo = await _repository.fetchMemoById(id);
     await _repository.deleteMemo(id);
     if (memo != null && memo.hasAudio) {
@@ -80,7 +107,23 @@ class MemoProvider extends ChangeNotifier {
         await file.delete();
       }
     }
-    await load();
+    await loadTrash();
+  }
+
+  /// [kTrashRetention] を過ぎたごみ箱内のメモを完全に削除する。
+  /// アプリ起動時に一度呼ぶ想定。
+  Future<void> purgeExpiredTrash() async {
+    final cutoff = DateTime.now().subtract(kTrashRetention);
+    final expired = await _repository.fetchExpiredTrash(cutoff);
+    for (final memo in expired) {
+      await _repository.deleteMemo(memo.id);
+      if (memo.hasAudio) {
+        final file = File(memo.audioPath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+    }
   }
 
   @override

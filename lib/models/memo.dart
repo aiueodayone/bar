@@ -9,6 +9,7 @@ class Memo {
     this.genreId,
     this.audioPath,
     this.audioDurationMs,
+    this.deletedAt,
   });
 
   factory Memo.fromMap(Map<String, Object?> map) {
@@ -21,6 +22,9 @@ class Memo {
       audioDurationMs: map['audio_duration_ms'] as int?,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at']! as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updated_at']! as int),
+      deletedAt: map['deleted_at'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(map['deleted_at']! as int),
     );
   }
 
@@ -33,7 +37,11 @@ class Memo {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// null でなければ「ごみ箱」に入っている(その時刻に削除された)。
+  final DateTime? deletedAt;
+
   bool get hasAudio => audioPath != null && audioPath!.isNotEmpty;
+  bool get isDeleted => deletedAt != null;
 
   Map<String, Object?> toMap() {
     return {
@@ -45,6 +53,7 @@ class Memo {
       'audio_duration_ms': audioDurationMs,
       'created_at': createdAt.millisecondsSinceEpoch,
       'updated_at': updatedAt.millisecondsSinceEpoch,
+      'deleted_at': deletedAt?.millisecondsSinceEpoch,
     };
   }
 
@@ -57,6 +66,8 @@ class Memo {
     int? audioDurationMs,
     bool clearAudio = false,
     DateTime? updatedAt,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) {
     return Memo(
       id: id,
@@ -69,6 +80,7 @@ class Memo {
           : (audioDurationMs ?? this.audioDurationMs),
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     );
   }
 }

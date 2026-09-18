@@ -15,6 +15,7 @@ import '../widgets/app_lock_setup_dialog.dart';
 import '../widgets/simple_password_prompt_dialog.dart';
 import 'privacy_info_screen.dart';
 import 'theme_selection_screen.dart';
+import 'trash_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -266,6 +267,13 @@ class SettingsScreen extends StatelessWidget {
             title: const Text('バックアップから復元'),
             subtitle: const Text('保存しておいたバックアップファイルからメモを復元します'),
             onTap: () => _restoreBackup(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline),
+            title: const Text('削除済み'),
+            subtitle: const Text('削除したメモは5日間ここに残り、復元できます'),
+            onTap: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const TrashScreen())),
           ),
           const Divider(),
           SwitchListTile(

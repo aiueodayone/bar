@@ -47,7 +47,11 @@ class MemoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => MemoProvider()..load()),
+        ChangeNotifierProvider(
+          create: (_) => MemoProvider()
+            ..load()
+            ..purgeExpiredTrash(),
+        ),
         ChangeNotifierProvider(create: (_) => GenreProvider()..load()),
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()..init()),
         ChangeNotifierProvider(create: (_) => AppLockProvider()..init()),

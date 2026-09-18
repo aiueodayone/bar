@@ -21,7 +21,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: MemoListItem(memo: memo, genre: genre, onTap: () {}),
+          body: MemoListItem(
+            memo: memo,
+            genre: genre,
+            onTap: () {},
+            onLongPress: () {},
+          ),
         ),
       ),
     );

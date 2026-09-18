@@ -10,11 +10,19 @@ class MemoListItem extends StatelessWidget {
     required this.memo,
     required this.genre,
     required this.onTap,
+    required this.onLongPress,
+    this.selectionMode = false,
+    this.selected = false,
   });
 
   final Memo memo;
   final Genre? genre;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  /// 一覧が複数選択モードのとき true。leading をチェックマークに切り替える。
+  final bool selectionMode;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -26,14 +34,25 @@ class MemoListItem extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
-      leading: CircleAvatar(
-        backgroundColor: genre?.color ?? Colors.grey.shade400,
-        child: Icon(
-          memo.hasAudio ? Icons.mic : Icons.notes,
-          color: Colors.white,
-          size: 20,
-        ),
-      ),
+      onLongPress: onLongPress,
+      selected: selected,
+      leading: selectionMode
+          ? CircleAvatar(
+              backgroundColor: selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.grey.shade300,
+              child: selected
+                  ? const Icon(Icons.check, color: Colors.white, size: 20)
+                  : null,
+            )
+          : CircleAvatar(
+              backgroundColor: genre?.color ?? Colors.grey.shade400,
+              child: Icon(
+                memo.hasAudio ? Icons.mic : Icons.notes,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
       title: Text(displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         memo.title.isNotEmpty && preview.isNotEmpty

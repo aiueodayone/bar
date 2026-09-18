@@ -343,7 +343,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('このメモを削除しますか?'),
-        content: const Text('この操作は取り消せません。'),
+        content: const Text('削除済みボックスに移動します。5日以内なら設定画面から復元できます。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

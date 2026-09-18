@@ -11,12 +11,13 @@ class MemoRepository {
 
   final DatabaseHelper _dbHelper;
 
+  /// ごみ箱に入っている(deleted_at が非NULLの)メモは含まない。
   Future<List<Memo>> fetchMemos({
     String? genreId,
     String searchQuery = '',
   }) async {
     final db = await _dbHelper.database;
-    final where = <String>[];
+    final where = <String>['deleted_at IS NULL'];
     final args = <Object?>[];
 
     if (genreId == 'unassigned') {
@@ -28,7 +29,7 @@ class MemoRepository {
 
     final rows = await db.query(
       'memos',
-      where: where.isEmpty ? null : where.join(' AND '),
+      where: where.join(' AND '),
       whereArgs: args.isEmpty ? null : args,
       orderBy: 'updated_at DESC',
     );
@@ -49,6 +50,28 @@ class MemoRepository {
     return memos;
   }
 
+  /// ごみ箱に入っているメモを、削除日時が新しい順に返す。
+  Future<List<Memo>> fetchTrashedMemos() async {
+    final db = await _dbHelper.database;
+    final rows = await db.query(
+      'memos',
+      where: 'deleted_at IS NOT NULL',
+      orderBy: 'deleted_at DESC',
+    );
+    return rows.map(Memo.fromMap).toList();
+  }
+
+  /// [cutoff] より前にごみ箱入りしたメモ(保存期限切れ)を返す。
+  Future<List<Memo>> fetchExpiredTrash(DateTime cutoff) async {
+    final db = await _dbHelper.database;
+    final rows = await db.query(
+      'memos',
+      where: 'deleted_at IS NOT NULL AND deleted_at < ?',
+      whereArgs: [cutoff.millisecondsSinceEpoch],
+    );
+    return rows.map(Memo.fromMap).toList();
+  }
+
   Future<Memo?> fetchMemoById(String id) async {
     final db = await _dbHelper.database;
     final rows = await db.query('memos', where: 'id = ?', whereArgs: [id]);
@@ -65,15 +88,42 @@ class MemoRepository {
     );
   }
 
+  /// ごみ箱に移動する(deleted_at をセットするだけで、行は残す)。
+  Future<void> softDeleteMemos(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final db = await _dbHelper.database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.update(
+      'memos',
+      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
+  }
+
+  /// ごみ箱から元に戻す(deleted_at を NULL に戻す)。
+  Future<void> restoreMemo(String id) async {
+    final db = await _dbHelper.database;
+    await db.update(
+      'memos',
+      {'deleted_at': null},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 行そのものを完全に削除する。ごみ箱からの完全削除・保存期限切れの
+  /// 自動削除の両方で使う。
   Future<void> deleteMemo(String id) async {
     final db = await _dbHelper.database;
     await db.delete('memos', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// ごみ箱に入っているものは数えない。
   Future<int> countByGenre(String genreId) async {
     final db = await _dbHelper.database;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) AS c FROM memos WHERE genre_id = ?',
+      'SELECT COUNT(*) AS c FROM memos WHERE genre_id = ? AND deleted_at IS NULL',
       [genreId],
     );
     return Sqflite.firstIntValue(result) ?? 0;

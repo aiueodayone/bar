@@ -22,10 +22,51 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   bool _searching = false;
 
+  // 一覧からの複数選択削除。空でなければ選択モード。
+  final Set<String> _selectedIds = {};
+
+  bool get _isSelecting => _selectedIds.isNotEmpty;
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (!_selectedIds.remove(id)) {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _clearSelection() => setState(_selectedIds.clear);
+
+  Future<void> _deleteSelected() async {
+    final count = _selectedIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('$count件のメモを削除しますか?'),
+        content: const Text('削除済みボックスに移動します。5日以内なら設定画面から復元できます。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final ids = _selectedIds.toList();
+    _clearSelection();
+    if (!mounted) return;
+    await context.read<MemoProvider>().moveToTrash(ids);
   }
 
   @override
@@ -35,39 +76,54 @@ class _HomeScreenState extends State<HomeScreen> {
     final adsRemoved = context.watch<AppSettingsProvider>().adsRemoved;
 
     return Scaffold(
-      appBar: AppBar(
-        title: _searching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'メモを検索',
-                  border: InputBorder.none,
+      appBar: _isSelecting
+          ? AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _clearSelection,
+              ),
+              title: Text('${_selectedIds.length}件選択中'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: '削除',
+                  onPressed: _deleteSelected,
                 ),
-                onChanged: memoProvider.setSearchQuery,
-              )
-            : const Text('手もとメモ'),
-        actions: [
-          IconButton(
-            icon: Icon(_searching ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                _searching = !_searching;
-                if (!_searching) {
-                  _searchController.clear();
-                  memoProvider.setSearchQuery('');
-                }
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          ),
-        ],
-      ),
+              ],
+            )
+          : AppBar(
+              title: _searching
+                  ? TextField(
+                      controller: _searchController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'メモを検索',
+                        border: InputBorder.none,
+                      ),
+                      onChanged: memoProvider.setSearchQuery,
+                    )
+                  : const Text('手もとメモ'),
+              actions: [
+                IconButton(
+                  icon: Icon(_searching ? Icons.close : Icons.search),
+                  onPressed: () {
+                    setState(() {
+                      _searching = !_searching;
+                      if (!_searching) {
+                        _searchController.clear();
+                        memoProvider.setSearchQuery('');
+                      }
+                    });
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                ),
+              ],
+            ),
       body: Column(
         children: [
           const SizedBox(height: 8),
@@ -93,11 +149,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       return MemoListItem(
                         memo: memo,
                         genre: genreProvider.byId(memo.genreId),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => MemoEditScreen(memoId: memo.id),
-                          ),
-                        ),
+                        selectionMode: _isSelecting,
+                        selected: _selectedIds.contains(memo.id),
+                        onTap: () {
+                          if (_isSelecting) {
+                            _toggleSelection(memo.id);
+                            return;
+                          }
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => MemoEditScreen(memoId: memo.id),
+                            ),
+                          );
+                        },
+                        onLongPress: () => _toggleSelection(memo.id),
                       );
                     },
                   ),
@@ -110,11 +175,14 @@ class _HomeScreenState extends State<HomeScreen> {
       // 起きない(body 内に広告を置くと、FAB は body の座標系ではなく
       // Scaffold 全体を基準に浮くため、広告と重なってしまう)。
       bottomNavigationBar: adsRemoved ? null : const BannerAdWidget(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const MemoEditScreen())),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _isSelecting
+          ? null
+          : FloatingActionButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const MemoEditScreen())),
+              child: const Icon(Icons.add),
+            ),
     );
   }
 }
