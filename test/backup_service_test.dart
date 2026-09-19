@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -70,12 +71,12 @@ void main() {
     final (bytes, fileName) = await service.createBackupBytes();
 
     expect(fileName, endsWith('.zip'));
-    // 暗号化されているので、平文のタイトル文字列がバイト列にそのまま
+    // 暗号化されているので、平文の内容文字列がバイト列にそのまま
     // 出てきてはいけない(=正しく暗号化されていることの確認)。
-    expect(
-      String.fromCharCodes(bytes.where((b) => b < 128)),
-      isNot(contains('m1')),
-    );
+    // ある程度長い文字列で比較しないと、ランダムなバイト列に短い部分列が
+    // 偶然一致してテストがまれに失敗する(flaky)ため、十分長い平文を使う。
+    final plainContentBytes = utf8.encode(memo.content);
+    expect(_containsSubsequence(bytes, plainContentBytes), isFalse);
 
     final (memoCount, genreCount) = await service.restoreFromBackup(bytes);
 
@@ -139,4 +140,19 @@ void main() {
     expect(await restoredAudioFile.exists(), isTrue);
     expect(await restoredAudioFile.readAsBytes(), audioBytes);
   });
+}
+
+bool _containsSubsequence(List<int> haystack, List<int> needle) {
+  if (needle.isEmpty || needle.length > haystack.length) return false;
+  for (var i = 0; i <= haystack.length - needle.length; i++) {
+    var matched = true;
+    for (var j = 0; j < needle.length; j++) {
+      if (haystack[i + j] != needle[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return true;
+  }
+  return false;
 }

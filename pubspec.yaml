@@ -102,14 +102,14 @@ flutter:
 flutter_launcher_icons:
   android: true
   image_path: "assets/icon/icon.png"
-  adaptive_icon_background: "#009688"
+  adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/icon/icon_foreground.png"
 
 # `dart run flutter_native_splash:create` (re)generates the native splash
 # screens (including Android 12+'s dedicated splash screen API) from this.
 flutter_native_splash:
-  color: "#009688"
+  color: "#FFFFFF"
   image: "assets/icon/icon_foreground.png"
   android_12:
-    color: "#009688"
+    color: "#FFFFFF"
     image: "assets/icon/icon_foreground.png"
