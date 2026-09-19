@@ -549,17 +549,39 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                 onStop: _toggleRecording,
               )
             else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton.filled(
-                    icon: const Icon(Icons.mic),
-                    iconSize: 32,
-                    onPressed: _toggleRecording,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(28),
+                  onTap: _toggleRecording,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.mic,
+                            size: 32,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text('音声メモを録音'),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 12),
-                  const Text('音声メモを録音'),
-                ],
+                ),
               ),
           ],
         ),
