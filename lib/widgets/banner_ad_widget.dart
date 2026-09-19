@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// Google 公式のテスト用バナー広告ユニットID。
-/// ストア公開前に AdMob 管理画面で取得した本番のユニットIDに置き換えること。
-const String kBannerAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
+/// バナー広告ユニットID(本番)。
+const String kBannerAdUnitId = 'ca-app-pub-3993791245597369/9355406914';
 
 /// 画面下部に表示するバナー広告。
 /// 広告解除済みの場合は呼び出し側でそもそも生成しない想定。

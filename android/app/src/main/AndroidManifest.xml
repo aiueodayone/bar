@@ -8,11 +8,10 @@
         android:label="手もとメモ"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!-- AdMob アプリID。実際にストア公開する際は AdMob 管理画面で取得した
-             本番のアプリIDに置き換えること。現在の値は Google 公式のテスト用IDです。 -->
+        <!-- AdMob アプリID(本番)。 -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-3993791245597369~2128398443" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
