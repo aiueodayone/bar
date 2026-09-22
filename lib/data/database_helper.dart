@@ -28,6 +28,12 @@ class DatabaseHelper {
       version: _dbVersion,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
+        // テスト環境(sqflite_common_ffi)では各テストファイルが別プロセス
+        // として同じディスク上の DB ファイルを開くため、同時書き込みが
+        // 稀に SQLITE_BUSY("database is locked")で即座に失敗することが
+        // ある。busy_timeout を設定し、ロックが空くまで少し待ってから
+        // 再試行させることでこれを避ける(実機の sqflite でも無害)。
+        await db.execute('PRAGMA busy_timeout = 5000');
       },
       onCreate: (db, version) async {
         await db.execute('''
