@@ -150,7 +150,11 @@ class BackupService {
         final zipPath = 'images/${image.id}${p.extension(image.path)}';
         final bytes = await file.readAsBytes();
         archive.addFile(ArchiveFile(zipPath, bytes.length, bytes));
-        entries.add({'file': zipPath, 'sortOrder': image.sortOrder});
+        entries.add({
+          'file': zipPath,
+          'sortOrder': image.sortOrder,
+          'type': image.type.name,
+        });
       }
       if (entries.isNotEmpty) {
         imagesByMemoId[memo.id] = entries;
@@ -307,6 +311,9 @@ class BackupService {
             path: outPath,
             sortOrder: imageMap['sortOrder'] as int? ?? i,
             createdAt: DateTime.now(),
+            type: MemoAttachmentType.fromName(
+              imageMap['type'] as String? ?? 'image',
+            ),
           ),
         );
       }

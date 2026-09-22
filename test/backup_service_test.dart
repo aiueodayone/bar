@@ -143,8 +143,8 @@ void main() {
     expect(await restoredAudioFile.readAsBytes(), audioBytes);
   });
 
-  test('a memo with attached images round-trips through backup/restore with '
-      'the same image bytes and order intact', () async {
+  test('a memo with attached images/video round-trips through backup/restore '
+      'with the same bytes, order, and attachment type intact', () async {
     final memoRepository = MemoRepository();
     final genreRepository = GenreRepository();
     final imageRepository = MemoImageRepository();
@@ -185,6 +185,7 @@ void main() {
         path: secondFile.path,
         sortOrder: 1,
         createdAt: DateTime.now(),
+        type: MemoAttachmentType.video,
       ),
     );
 
@@ -211,6 +212,8 @@ void main() {
     expect(restoredImages, hasLength(2));
     expect(restoredImages[0].sortOrder, 0);
     expect(restoredImages[1].sortOrder, 1);
+    expect(restoredImages[0].type, MemoAttachmentType.image);
+    expect(restoredImages[1].type, MemoAttachmentType.video);
 
     final restoredFirstFile = File(restoredImages[0].path);
     final restoredSecondFile = File(restoredImages[1].path);

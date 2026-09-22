@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart' show Amplitude;
 import 'package:uuid/uuid.dart';
+import 'package:video_player/video_player.dart';
 
 import '../data/memo_image_repository.dart';
 import '../data/memo_repository.dart';
@@ -329,13 +330,23 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('カメラで撮影'),
-              onTap: () => Navigator.of(sheetContext).pop('camera'),
+              title: const Text('写真を撮影'),
+              onTap: () => Navigator.of(sheetContext).pop('photo_camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('動画を撮影'),
+              onTap: () => Navigator.of(sheetContext).pop('video_camera'),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('ギャラリーから選ぶ'),
-              onTap: () => Navigator.of(sheetContext).pop('gallery'),
+              title: const Text('写真をギャラリーから選ぶ'),
+              onTap: () => Navigator.of(sheetContext).pop('photo_gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library_outlined),
+              title: const Text('動画をギャラリーから選ぶ'),
+              onTap: () => Navigator.of(sheetContext).pop('video_gallery'),
             ),
           ],
         ),
@@ -346,11 +357,21 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     setState(() => _isPickingImages = true);
     try {
       final picked = <XFile>[];
-      if (source == 'camera') {
-        final file = await _imageService.pickFromCamera();
-        if (file != null) picked.add(file);
-      } else {
-        picked.addAll(await _imageService.pickFromGallery());
+      var type = MemoAttachmentType.image;
+      switch (source) {
+        case 'photo_camera':
+          final file = await _imageService.pickFromCamera();
+          if (file != null) picked.add(file);
+        case 'video_camera':
+          type = MemoAttachmentType.video;
+          final file = await _imageService.pickVideoFromCamera();
+          if (file != null) picked.add(file);
+        case 'video_gallery':
+          type = MemoAttachmentType.video;
+          final file = await _imageService.pickVideoFromGallery();
+          if (file != null) picked.add(file);
+        default:
+          picked.addAll(await _imageService.pickFromGallery());
       }
       for (final file in picked) {
         final path = await _imageService.importImage(file);
@@ -361,6 +382,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
             path: path,
             sortOrder: _images.length,
             createdAt: DateTime.now(),
+            type: type,
           ),
         );
       }
@@ -368,7 +390,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('画像を追加できませんでした: $e')));
+        ).showSnackBar(SnackBar(content: Text('追加できませんでした: $e')));
       }
     } finally {
       if (mounted) setState(() => _isPickingImages = false);
@@ -379,7 +401,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('画像を削除しますか?'),
+        title: Text(image.isVideo ? '動画を削除しますか?' : '画像を削除しますか?'),
         content: const Text('この操作は取り消せません。'),
         actions: [
           TextButton(
@@ -401,6 +423,12 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   }
 
   void _viewImage(MemoImage image) {
+    if (image.isVideo) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => _VideoPlayerPage(image.path)));
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
@@ -645,7 +673,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         child: TextButton.icon(
           onPressed: _pickImages,
           icon: const Icon(Icons.add_photo_alternate_outlined),
-          label: const Text('画像を追加'),
+          label: const Text('写真・動画を追加'),
         ),
       );
     }
@@ -665,12 +693,23 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                     onTap: () => _viewImage(image),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(image.path),
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                      ),
+                      child: image.isVideo
+                          ? Container(
+                              width: 80,
+                              height: 80,
+                              color: Colors.black87,
+                              child: const Icon(
+                                Icons.play_circle_outline,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            )
+                          : Image.file(
+                              File(image.path),
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                            ),
                     ),
                   ),
                   Positioned(
@@ -947,6 +986,87 @@ class _PlaybackSliderState extends State<_PlaybackSlider> {
       max: maxMs.toDouble(),
       onChanged: (v) =>
           widget.playbackService.seek(Duration(milliseconds: v.toInt())),
+    );
+  }
+}
+
+/// 添付動画をフルスクリーンで再生する画面。開くと自動再生し、タップで
+/// 再生/一時停止を切り替える。
+class _VideoPlayerPage extends StatefulWidget {
+  const _VideoPlayerPage(this.path);
+
+  final String path;
+
+  @override
+  State<_VideoPlayerPage> createState() => _VideoPlayerPageState();
+}
+
+class _VideoPlayerPageState extends State<_VideoPlayerPage> {
+  late final VideoPlayerController _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.file(File(widget.path))
+      ..initialize().then((_) {
+        if (!mounted) return;
+        setState(() => _ready = true);
+        _controller.play();
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _togglePlayback() {
+    if (_controller.value.isPlaying) {
+      _controller.pause();
+    } else {
+      _controller.play();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: _ready
+            ? GestureDetector(
+                onTap: _togglePlayback,
+                child: AspectRatio(
+                  aspectRatio: _controller.value.aspectRatio,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      VideoPlayer(_controller),
+                      AnimatedBuilder(
+                        animation: _controller,
+                        builder: (context, _) {
+                          if (_controller.value.isPlaying) {
+                            return const SizedBox.shrink();
+                          }
+                          return const Icon(
+                            Icons.play_circle_outline,
+                            color: Colors.white70,
+                            size: 72,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : const CircularProgressIndicator(),
+      ),
     );
   }
 }

@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
-/// メモに添付する画像の取り込み・保存先管理を担うサービス。
+/// メモに添付する画像・動画の取り込み・保存先管理を担うサービス。
 ///
 /// 画像ピッカー/カメラが返すファイルは一時領域(キャッシュ等)にあり、
 /// OS やアプリの都合でいつ消えてもおかしくない。録音ファイルと同様、
@@ -21,8 +21,14 @@ class ImageService {
   Future<XFile?> pickFromCamera() =>
       _picker.pickImage(source: ImageSource.camera);
 
+  Future<XFile?> pickVideoFromGallery() =>
+      _picker.pickVideo(source: ImageSource.gallery);
+
+  Future<XFile?> pickVideoFromCamera() =>
+      _picker.pickVideo(source: ImageSource.camera);
+
   /// ピッカー/カメラが返した一時ファイルをアプリの保存領域にコピーし、
-  /// 新しい保存先のパスを返す。
+  /// 新しい保存先のパスを返す。画像・動画どちらでも使える。
   Future<String> importImage(XFile source) async {
     final dir = await _imagesDirectory();
     final ext = p.extension(source.path);

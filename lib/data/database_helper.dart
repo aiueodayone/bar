@@ -8,7 +8,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
 
   static const String _dbName = 'memo_app.db';
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 4;
 
   Database? _db;
 
@@ -72,6 +72,7 @@ class DatabaseHelper {
             path TEXT NOT NULL,
             sort_order INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
+            type TEXT NOT NULL DEFAULT 'image',
             FOREIGN KEY (memo_id) REFERENCES memos (id) ON DELETE CASCADE
           )
         ''');
@@ -102,6 +103,13 @@ class DatabaseHelper {
           ''');
           await db.execute(
             'CREATE INDEX idx_memo_images_memo_id ON memo_images (memo_id)',
+          );
+        }
+        // 動画添付機能のために type 列を追加する('image' または 'video')。
+        // 既存行はすべて画像なので、デフォルト値 'image' がそのまま正しい。
+        if (oldVersion < 4) {
+          await db.execute(
+            "ALTER TABLE memo_images ADD COLUMN type TEXT NOT NULL DEFAULT 'image'",
           );
         }
       },

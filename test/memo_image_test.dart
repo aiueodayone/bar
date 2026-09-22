@@ -100,4 +100,49 @@ void main() {
       expect(await imageRepository.fetchImagesForMemo('img-memo-2'), isEmpty);
     },
   );
+
+  test(
+    'attachment type (image vs video) round-trips through insert/fetch, and '
+    'defaults to image when not given',
+    () async {
+      final memoRepository = MemoRepository();
+      final imageRepository = MemoImageRepository();
+      final now = DateTime.now();
+
+      await memoRepository.upsertMemo(
+        Memo(
+          id: 'img-memo-3',
+          title: 'タイプテスト',
+          content: '',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await imageRepository.insertImage(
+        MemoImage(
+          id: 'img-4',
+          memoId: 'img-memo-3',
+          path: '/tmp/four.jpg',
+          sortOrder: 0,
+          createdAt: now,
+        ),
+      );
+      await imageRepository.insertImage(
+        MemoImage(
+          id: 'img-5',
+          memoId: 'img-memo-3',
+          path: '/tmp/five.mp4',
+          sortOrder: 1,
+          createdAt: now,
+          type: MemoAttachmentType.video,
+        ),
+      );
+
+      final images = await imageRepository.fetchImagesForMemo('img-memo-3');
+      expect(images[0].type, MemoAttachmentType.image);
+      expect(images[0].isVideo, isFalse);
+      expect(images[1].type, MemoAttachmentType.video);
+      expect(images[1].isVideo, isTrue);
+    },
+  );
 }
