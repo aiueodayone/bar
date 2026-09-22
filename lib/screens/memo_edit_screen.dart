@@ -321,6 +321,14 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   Future<void> _pickImages() async {
     final original = _original;
     if (original == null) return;
+    // カメラでの撮影(特に動画)はマイクも使うため、音声メモの録音中に
+    // 開いてしまうと録音がカメラアプリ側に横取りされて壊れる恐れがある。
+    if (_isRecording) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('録音中は写真・動画を追加できません')));
+      return;
+    }
 
     final source = await showModalBottomSheet<String>(
       context: context,
@@ -422,7 +430,14 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     setState(() => _images.removeWhere((i) => i.id == image.id));
   }
 
-  void _viewImage(MemoImage image) {
+  Future<void> _viewImage(MemoImage image) async {
+    // 音声メモを再生中に画像/動画ビューアーを開くと、動画の音声と二重に
+    // 鳴ってしまう(動画には自前の音声がある)ため、先に止めておく。
+    if (_isPlaying) {
+      await _playbackService.pause();
+      if (mounted) setState(() => _isPlaying = false);
+    }
+    if (!mounted) return;
     if (image.isVideo) {
       Navigator.of(
         context,
