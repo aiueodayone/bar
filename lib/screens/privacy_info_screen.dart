@@ -13,11 +13,13 @@ class PrivacyInfoScreen extends StatelessWidget {
         children: const [
           _Section(
             icon: Icons.mic_outlined,
-            title: '録音した音声データについて',
+            title: '録音した音声データ・添付画像について',
             body:
-                '録音した音声ファイルは、この端末の中にのみ保存されます。\n'
-                'メモの内容や録音データが、開発者を含む外部のサーバーへ自動的に'
-                '送信されることはありません。',
+                '録音した音声ファイルや、メモに添付した画像は、この端末の中にのみ'
+                '保存されます。カメラで撮影した写真も、その場で端末内にコピーされる'
+                'だけで、外部には送信されません。\n'
+                'メモの内容・録音データ・添付画像が、開発者を含む外部のサーバーへ'
+                '自動的に送信されることはありません。',
           ),
           _Section(
             icon: Icons.subtitles_outlined,

@@ -9,9 +9,11 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../data/genre_repository.dart';
+import '../data/memo_image_repository.dart';
 import '../data/memo_repository.dart';
 import '../models/genre.dart';
 import '../models/memo.dart';
+import '../models/memo_image.dart';
 
 /// バックアップファイル(backup.json)の形式バージョン。
 ///
@@ -101,11 +103,14 @@ class BackupService {
   BackupService({
     MemoRepository? memoRepository,
     GenreRepository? genreRepository,
+    MemoImageRepository? imageRepository,
   }) : _memoRepository = memoRepository ?? MemoRepository(),
-       _genreRepository = genreRepository ?? GenreRepository();
+       _genreRepository = genreRepository ?? GenreRepository(),
+       _imageRepository = imageRepository ?? MemoImageRepository();
 
   final MemoRepository _memoRepository;
   final GenreRepository _genreRepository;
+  final MemoImageRepository _imageRepository;
 
   /// 全メモ・ジャンル・録音ファイルをまとめた暗号化済みバックアップを
   /// 作成し、そのバイト列とファイル名を返す。
@@ -123,6 +128,7 @@ class BackupService {
 
     final archive = Archive();
     final audioFileByMemoId = <String, String>{};
+    final imagesByMemoId = <String, List<Map<String, Object?>>>{};
 
     for (final memo in memos) {
       if (!memo.hasAudio) continue;
@@ -132,6 +138,23 @@ class BackupService {
       final bytes = await file.readAsBytes();
       archive.addFile(ArchiveFile(zipPath, bytes.length, bytes));
       audioFileByMemoId[memo.id] = zipPath;
+    }
+
+    for (final memo in memos) {
+      final images = await _imageRepository.fetchImagesForMemo(memo.id);
+      if (images.isEmpty) continue;
+      final entries = <Map<String, Object?>>[];
+      for (final image in images) {
+        final file = File(image.path);
+        if (!await file.exists()) continue;
+        final zipPath = 'images/${image.id}${p.extension(image.path)}';
+        final bytes = await file.readAsBytes();
+        archive.addFile(ArchiveFile(zipPath, bytes.length, bytes));
+        entries.add({'file': zipPath, 'sortOrder': image.sortOrder});
+      }
+      if (entries.isNotEmpty) {
+        imagesByMemoId[memo.id] = entries;
+      }
     }
 
     final data = <String, Object?>{
@@ -150,6 +173,7 @@ class BackupService {
             'genreId': memo.genreId,
             'audioFile': audioFileByMemoId[memo.id],
             'audioDurationMs': memo.audioDurationMs,
+            'images': imagesByMemoId[memo.id] ?? const [],
             'createdAt': memo.createdAt.millisecondsSinceEpoch,
             'updatedAt': memo.updatedAt.millisecondsSinceEpoch,
           },
@@ -231,9 +255,11 @@ class BackupService {
     }
 
     final audioDir = await _voiceMemosDirectory();
+    final imagesDir = await _memoImagesDirectory();
     final memosJson = (data['memos'] as List<dynamic>?) ?? const [];
     for (final entry in memosJson) {
       final memoMap = entry as Map<String, dynamic>;
+      final memoId = memoMap['id'] as String;
       String? restoredAudioPath;
       final audioFileInZip = memoMap['audioFile'] as String?;
       if (audioFileInZip != null) {
@@ -246,7 +272,7 @@ class BackupService {
       }
 
       final memo = Memo(
-        id: memoMap['id'] as String,
+        id: memoId,
         title: memoMap['title'] as String,
         content: memoMap['content'] as String,
         genreId: memoMap['genreId'] as String?,
@@ -260,6 +286,30 @@ class BackupService {
         ),
       );
       await _memoRepository.upsertMemo(memo);
+
+      // このメモの画像は、バックアップの内容で洗い替える(復元前に既に
+      // 付いていた画像は一旦すべて消してから、バックアップの内容を
+      // 入れ直す)。
+      await _imageRepository.deleteImagesForMemo(memoId);
+      final imagesJson = (memoMap['images'] as List<dynamic>?) ?? const [];
+      for (var i = 0; i < imagesJson.length; i++) {
+        final imageMap = imagesJson[i] as Map<String, dynamic>;
+        final fileInZip = imageMap['file'] as String?;
+        if (fileInZip == null) continue;
+        final match = archive.files.where((f) => f.name == fileInZip);
+        if (match.isEmpty) continue;
+        final outPath = p.join(imagesDir.path, p.basename(fileInZip));
+        await File(outPath).writeAsBytes(match.first.content as List<int>);
+        await _imageRepository.insertImage(
+          MemoImage(
+            id: p.basenameWithoutExtension(fileInZip),
+            memoId: memoId,
+            path: outPath,
+            sortOrder: imageMap['sortOrder'] as int? ?? i,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
     }
 
     return (memosJson.length, genresJson.length);
@@ -328,6 +378,15 @@ class BackupService {
   Future<Directory> _voiceMemosDirectory() async {
     final appDir = await getApplicationDocumentsDirectory();
     final dir = Directory(p.join(appDir.path, 'voice_memos'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  Future<Directory> _memoImagesDirectory() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final dir = Directory(p.join(appDir.path, 'memo_images'));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }

@@ -1,16 +1,22 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart' show Amplitude;
+import 'package:uuid/uuid.dart';
 
+import '../data/memo_image_repository.dart';
 import '../data/memo_repository.dart';
 import '../models/memo.dart';
+import '../models/memo_image.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
 import '../services/audio_service.dart';
 import '../services/export_service.dart';
+import '../services/image_service.dart';
 import '../services/playback_service.dart';
 import '../services/transcription_service.dart';
 import '../widgets/banner_ad_widget.dart';
@@ -31,10 +37,13 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   final _repository = MemoRepository();
+  final _imageRepository = MemoImageRepository();
   final _audioService = AudioService();
+  final _imageService = ImageService();
   final _playbackService = PlaybackService();
   final _transcriptionService = TranscriptionService();
   final _exportService = ExportService();
+  final _uuid = const Uuid();
 
   Memo? _original;
   bool _isLoading = true;
@@ -46,6 +55,11 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   String? _initialAudioPath;
 
   bool _isRecording = false;
+
+  List<MemoImage> _images = [];
+  List<MemoImage> _initialImages = [];
+  Set<String> _initialImageIds = {};
+  bool _isPickingImages = false;
 
   bool _isPlaying = false;
   StreamSubscription<void>? _playbackCompleteSub;
@@ -76,6 +90,10 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         _audioPath = memo.audioPath;
         _audioDurationMs = memo.audioDurationMs;
         _initialAudioPath = memo.audioPath;
+        final images = await _imageRepository.fetchImagesForMemo(memo.id);
+        _images = List.of(images);
+        _initialImages = List.of(images);
+        _initialImageIds = images.map((i) => i.id).toSet();
       }
     } else {
       final draft = context.read<MemoProvider>().createDraft();
@@ -90,6 +108,13 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     _playbackCompleteSub?.cancel();
     if (!_saved && _audioPath != null && _audioPath != _initialAudioPath) {
       _audioService.deleteFile(_audioPath!);
+    }
+    if (!_saved) {
+      for (final image in _images) {
+        if (!_initialImageIds.contains(image.id)) {
+          _imageService.deleteFile(image.path);
+        }
+      }
     }
     _titleController.dispose();
     _contentController.dispose();
@@ -252,7 +277,10 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
-    if (title.isEmpty && content.isEmpty && _audioPath == null) {
+    if (title.isEmpty &&
+        content.isEmpty &&
+        _audioPath == null &&
+        _images.isEmpty) {
       Navigator.of(context).pop();
       return;
     }
@@ -269,7 +297,124 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
 
     _saved = true;
     await context.read<MemoProvider>().saveMemo(memo);
+    await _persistImageChanges();
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// 編集中に追加・削除した画像を確定させる。既存の画像で一覧から
+  /// 消したものは DB 行とファイルの両方を削除し、新しく追加したものは
+  /// DB に登録する。
+  Future<void> _persistImageChanges() async {
+    final currentIds = _images.map((i) => i.id).toSet();
+    for (final removed in _initialImages) {
+      if (currentIds.contains(removed.id)) continue;
+      await _imageRepository.deleteImage(removed.id);
+      await _imageService.deleteFile(removed.path);
+    }
+    for (final image in _images) {
+      if (_initialImageIds.contains(image.id)) continue;
+      await _imageRepository.insertImage(image);
+    }
+  }
+
+  Future<void> _pickImages() async {
+    final original = _original;
+    if (original == null) return;
+
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('カメラで撮影'),
+              onTap: () => Navigator.of(sheetContext).pop('camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('ギャラリーから選ぶ'),
+              onTap: () => Navigator.of(sheetContext).pop('gallery'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    setState(() => _isPickingImages = true);
+    try {
+      final picked = <XFile>[];
+      if (source == 'camera') {
+        final file = await _imageService.pickFromCamera();
+        if (file != null) picked.add(file);
+      } else {
+        picked.addAll(await _imageService.pickFromGallery());
+      }
+      for (final file in picked) {
+        final path = await _imageService.importImage(file);
+        _images.add(
+          MemoImage(
+            id: _uuid.v4(),
+            memoId: original.id,
+            path: path,
+            sortOrder: _images.length,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('画像を追加できませんでした: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isPickingImages = false);
+    }
+  }
+
+  Future<void> _removeImage(MemoImage image) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('画像を削除しますか?'),
+        content: const Text('この操作は取り消せません。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    if (!_initialImageIds.contains(image.id)) {
+      await _imageService.deleteFile(image.path);
+    }
+    setState(() => _images.removeWhere((i) => i.id == image.id));
+  }
+
+  void _viewImage(MemoImage image) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(child: Image.file(File(image.path))),
+          ),
+        ),
+      ),
+    );
   }
 
   Memo _currentMemoSnapshot() {
@@ -473,7 +618,15 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _buildAudioSection(context),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildImagesSection(context),
+                  const SizedBox(height: 8),
+                  _buildAudioSection(context),
+                ],
+              ),
             ),
           ],
         ),
@@ -481,6 +634,84 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         // すぐ下に固定表示されつつ、Scaffold のレイアウト計算に乗るため、
         // 広告の読み込みタイミングで録音ボタンの位置がずれることもない。
         bottomNavigationBar: adsRemoved ? null : const BannerAdWidget(),
+      ),
+    );
+  }
+
+  Widget _buildImagesSection(BuildContext context) {
+    if (_images.isEmpty && !_isPickingImages) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: _pickImages,
+          icon: const Icon(Icons.add_photo_alternate_outlined),
+          label: const Text('画像を追加'),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 88,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final image in _images)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  GestureDetector(
+                    onTap: () => _viewImage(image),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(image.path),
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: -8,
+                    right: -8,
+                    child: IconButton(
+                      icon: const Icon(Icons.cancel),
+                      iconSize: 20,
+                      color: Colors.black54,
+                      onPressed: () => _removeImage(image),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          GestureDetector(
+            onTap: _isPickingImages ? null : _pickImages,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: _isPickingImages
+                  ? const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }

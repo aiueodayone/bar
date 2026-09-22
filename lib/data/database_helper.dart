@@ -8,7 +8,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
 
   static const String _dbName = 'memo_app.db';
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
 
   Database? _db;
 
@@ -59,6 +59,19 @@ class DatabaseHelper {
         await db.execute(
           'CREATE INDEX idx_memos_deleted_at ON memos (deleted_at)',
         );
+        await db.execute('''
+          CREATE TABLE memo_images (
+            id TEXT PRIMARY KEY,
+            memo_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (memo_id) REFERENCES memos (id) ON DELETE CASCADE
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX idx_memo_images_memo_id ON memo_images (memo_id)',
+        );
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ごみ箱(削除済みボックス)機能のために deleted_at 列を追加する。
@@ -67,6 +80,22 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE memos ADD COLUMN deleted_at INTEGER');
           await db.execute(
             'CREATE INDEX idx_memos_deleted_at ON memos (deleted_at)',
+          );
+        }
+        // 画像添付機能のために memo_images テーブルを追加する。
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE memo_images (
+              id TEXT PRIMARY KEY,
+              memo_id TEXT NOT NULL,
+              path TEXT NOT NULL,
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              created_at INTEGER NOT NULL,
+              FOREIGN KEY (memo_id) REFERENCES memos (id) ON DELETE CASCADE
+            )
+          ''');
+          await db.execute(
+            'CREATE INDEX idx_memo_images_memo_id ON memo_images (memo_id)',
           );
         }
       },

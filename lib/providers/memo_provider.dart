@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+import '../data/memo_image_repository.dart';
 import '../data/memo_repository.dart';
 import '../models/memo.dart';
 
@@ -13,10 +14,12 @@ const Duration kTrashRetention = Duration(days: 5);
 
 /// メモ一覧・検索・ジャンル絞り込み・ごみ箱の状態を管理する。
 class MemoProvider extends ChangeNotifier {
-  MemoProvider({MemoRepository? repository})
-    : _repository = repository ?? MemoRepository();
+  MemoProvider({MemoRepository? repository, MemoImageRepository? imageRepository})
+    : _repository = repository ?? MemoRepository(),
+      _imageRepository = imageRepository ?? MemoImageRepository();
 
   final MemoRepository _repository;
+  final MemoImageRepository _imageRepository;
   final _uuid = const Uuid();
 
   List<Memo> _memos = [];
@@ -97,12 +100,22 @@ class MemoProvider extends ChangeNotifier {
     await load();
   }
 
-  /// ごみ箱から完全に削除する(録音ファイルも削除する)。取り消せない。
+  /// ごみ箱から完全に削除する(録音ファイル・添付画像も削除する)。
+  /// 取り消せない。
   Future<void> permanentlyDelete(String id) async {
     final memo = await _repository.fetchMemoById(id);
+    final images = await _imageRepository.fetchImagesForMemo(id);
+    // memo_images の行は外部キーの ON DELETE CASCADE で一緒に消えるが、
+    // ファイル自体は別途消す必要があるので、消す前にパスを取っておく。
     await _repository.deleteMemo(id);
     if (memo != null && memo.hasAudio) {
       final file = File(memo.audioPath!);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    }
+    for (final image in images) {
+      final file = File(image.path);
       if (await file.exists()) {
         await file.delete();
       }
@@ -116,9 +129,16 @@ class MemoProvider extends ChangeNotifier {
     final cutoff = DateTime.now().subtract(kTrashRetention);
     final expired = await _repository.fetchExpiredTrash(cutoff);
     for (final memo in expired) {
+      final images = await _imageRepository.fetchImagesForMemo(memo.id);
       await _repository.deleteMemo(memo.id);
       if (memo.hasAudio) {
         final file = File(memo.audioPath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+      for (final image in images) {
+        final file = File(image.path);
         if (await file.exists()) {
           await file.delete();
         }

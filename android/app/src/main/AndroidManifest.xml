@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 音声メモの録音に使用 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 画像添付機能でのカメラ撮影に使用 -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- 文字起こしモデルの初回ダウンロードと広告表示に使用 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
