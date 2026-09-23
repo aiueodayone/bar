@@ -296,9 +296,22 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       clearAudio: _audioPath == null,
     );
 
+    try {
+      await context.read<MemoProvider>().saveMemo(memo);
+      await _persistImageChanges();
+    } catch (e) {
+      // 保存が失敗しても無反応に見えないよう、必ず利用者に伝える。
+      // ここで画面を閉じてしまうと入力内容がそのまま失われるので、
+      // 閉じずに編集画面に留まらせる(再試行できるように)。
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存に失敗しました: $e')));
+      }
+      return;
+    }
+
     _saved = true;
-    await context.read<MemoProvider>().saveMemo(memo);
-    await _persistImageChanges();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -682,90 +695,129 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   }
 
   Widget _buildImagesSection(BuildContext context) {
+    // 「音声メモを録音」ボタン(_buildAudioSection の空状態)と見た目を
+    // 揃える: Card の中に、丸いアイコン+ラベルを1つのタップ領域として
+    // 置く。
     if (_images.isEmpty && !_isPickingImages) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: _pickImages,
-          icon: const Icon(Icons.add_photo_alternate_outlined),
-          label: const Text('写真・動画を追加'),
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(28),
+              onTap: _pickImages,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 16,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: 32,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('写真・動画を追加'),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       );
     }
 
-    return SizedBox(
-      height: 88,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          for (final image in _images)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  GestureDetector(
-                    onTap: () => _viewImage(image),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: image.isVideo
-                          ? Container(
-                              width: 80,
-                              height: 80,
-                              color: Colors.black87,
-                              child: const Icon(
-                                Icons.play_circle_outline,
-                                color: Colors.white,
-                                size: 32,
-                              ),
-                            )
-                          : Image.file(
-                              File(image.path),
-                              width: 80,
-                              height: 80,
-                              fit: BoxFit.cover,
-                            ),
-                    ),
-                  ),
-                  Positioned(
-                    top: -8,
-                    right: -8,
-                    child: IconButton(
-                      icon: const Icon(Icons.cancel),
-                      iconSize: 20,
-                      color: Colors.black54,
-                      onPressed: () => _removeImage(image),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          GestureDetector(
-            onTap: _isPickingImages ? null : _pickImages,
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: _isPickingImages
-                  ? const Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: SizedBox(
+          height: 88,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (final image in _images)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      GestureDetector(
+                        onTap: () => _viewImage(image),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: image.isVideo
+                              ? Container(
+                                  width: 80,
+                                  height: 80,
+                                  color: Colors.black87,
+                                  child: const Icon(
+                                    Icons.play_circle_outline,
+                                    color: Colors.white,
+                                    size: 32,
+                                  ),
+                                )
+                              : Image.file(
+                                  File(image.path),
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
+                        ),
                       ),
-                    )
-                  : Icon(
-                      Icons.add_photo_alternate_outlined,
-                      color: Theme.of(context).colorScheme.primary,
+                      Positioned(
+                        top: -8,
+                        right: -8,
+                        child: IconButton(
+                          icon: const Icon(Icons.cancel),
+                          iconSize: 20,
+                          color: Colors.black54,
+                          onPressed: () => _removeImage(image),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              GestureDetector(
+                onTap: _isPickingImages ? null : _pickImages,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
                     ),
-            ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: _isPickingImages
+                      ? const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : Icon(
+                          Icons.add_photo_alternate_outlined,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

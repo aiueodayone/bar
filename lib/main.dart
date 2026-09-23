@@ -25,11 +25,12 @@ void main() {
         FlutterError.presentError(details);
       };
 
-      try {
-        await MobileAds.instance.initialize();
-      } catch (_) {
-        // 広告なしで続行
-      }
+      // 広告SDKの初期化はネットワーク状況によっては数秒〜それ以上かかる
+      // ことがある。ここで await してしまうと、その間ずっとアプリの最初の
+      // 画面が描画されず(OS側のスプラッシュがぐるぐる回り続けたように
+      // 見える)、起動が遅くなる。BannerAdWidget 側は読み込み前は何も
+      // 表示しない作りになっているので、待たずに裏で初期化を進める。
+      unawaited(_initAds());
 
       runApp(const MemoApp());
     },
@@ -38,6 +39,14 @@ void main() {
       debugPrint('Uncaught error: $error\n$stack');
     },
   );
+}
+
+Future<void> _initAds() async {
+  try {
+    await MobileAds.instance.initialize();
+  } catch (_) {
+    // 広告なしで続行
+  }
 }
 
 class MemoApp extends StatelessWidget {

@@ -21,6 +21,14 @@ void main() {
     }
 
     expect(find.text('録音も文字起こしも\nメールなどですぐ共有'), findsOneWidget);
+    expect(find.text('次へ'), findsOneWidget);
+
+    // 最後のページ(オフライン文字起こしモデルのダウンロード)。
+    await tester.tap(find.text('次へ'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('オフライン文字起こしの準備'), findsOneWidget);
+    expect(find.text('今すぐダウンロード'), findsOneWidget);
     expect(find.text('はじめる'), findsOneWidget);
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/settings_service.dart';
+import '../services/transcription_service.dart';
 import 'home_screen.dart';
 
 class _OnboardingPage {
@@ -47,6 +48,11 @@ const List<_OnboardingPage> _kPages = [
   ),
 ];
 
+/// 最後のページ(オフライン文字起こしモデルのダウンロード)を含めた
+/// 総ページ数。最後の1枚だけは、他のページと違って中に操作(ダウンロード
+/// ボタン)を持つため、[_kPages] とは別に組み込む。
+int get _totalPages => _kPages.length + 1;
+
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -56,7 +62,48 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageController = PageController();
+  final _transcriptionService = TranscriptionService();
   int _currentPage = 0;
+
+  bool _isModelReady = false;
+  bool _isDownloading = false;
+  double _downloadProgress = 0;
+  String? _downloadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkModelReady();
+  }
+
+  Future<void> _checkModelReady() async {
+    try {
+      final ready = await _transcriptionService.isModelReady();
+      if (mounted) setState(() => _isModelReady = ready);
+    } catch (_) {
+      // 確認できなくても支障はない(ダウンロードボタンが表示されるだけ)。
+    }
+  }
+
+  Future<void> _downloadModel() async {
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0;
+      _downloadError = null;
+    });
+    try {
+      await _transcriptionService.ensureModelReady(
+        onProgress: (p) {
+          if (mounted) setState(() => _downloadProgress = p);
+        },
+      );
+      if (mounted) setState(() => _isModelReady = true);
+    } catch (e) {
+      if (mounted) setState(() => _downloadError = '$e');
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
 
   Future<void> _finish() async {
     await SettingsService().setOnboardingSeen();
@@ -66,7 +113,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _next() {
-    if (_currentPage == _kPages.length - 1) {
+    if (_currentPage == _totalPages - 1) {
       _finish();
       return;
     }
@@ -79,12 +126,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    _transcriptionService.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLastPage = _currentPage == _kPages.length - 1;
+    final isLastPage = _currentPage == _totalPages - 1;
 
     return Scaffold(
       body: SafeArea(
@@ -97,9 +145,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
-                itemCount: _kPages.length,
+                itemCount: _totalPages,
                 onPageChanged: (index) => setState(() => _currentPage = index),
                 itemBuilder: (context, index) {
+                  if (index == _kPages.length) {
+                    return _buildTranscriptionDownloadPage(context);
+                  }
                   final page = _kPages[index];
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -133,7 +184,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                for (var i = 0; i < _kPages.length; i++)
+                for (var i = 0; i < _totalPages; i++)
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -162,6 +213,80 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTranscriptionDownloadPage(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.download_outlined,
+            size: 96,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 32),
+          Text(
+            'オフライン文字起こしの準備',
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '音声メモを文字にするための、日本語の音声認識モデル(約50MB)を'
+            '今ダウンロードしておくことができます。あとからメモ編集画面で'
+            'ダウンロードすることもできるので、今はスキップしても構いません。',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'ダウンロードするとオフラインで文字起こしが可能です。ただ、'
+              '精度はあまり良くありません。補助的にご利用ください。',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          const SizedBox(height: 24),
+          if (_isModelReady)
+            const Chip(
+              avatar: Icon(Icons.check_circle, color: Colors.green),
+              label: Text('ダウンロード済みです'),
+            )
+          else if (_isDownloading)
+            Column(
+              children: [
+                LinearProgressIndicator(value: _downloadProgress),
+                const SizedBox(height: 8),
+                Text('${(_downloadProgress * 100).toStringAsFixed(0)}%'),
+              ],
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: _downloadModel,
+              icon: const Icon(Icons.download_outlined),
+              label: const Text('今すぐダウンロード'),
+            ),
+          if (_downloadError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'ダウンロードに失敗しました: $_downloadError',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+        ],
       ),
     );
   }
