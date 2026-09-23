@@ -50,6 +50,10 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   Memo? _original;
   bool _isLoading = true;
   bool _saved = false;
+  // _autosaveBeforeLeavingApp が、まだ一度も保存されていなかった新規
+  // メモの行を先行して作った場合に true。_save() 側で「結局何も
+  // 追加されなかった」場合の後始末に使う。
+  bool _createdMemoRow = false;
   String? _selectedGenreId;
 
   String? _audioPath;
@@ -290,7 +294,19 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         content.isEmpty &&
         _audioPath == null &&
         _images.isEmpty) {
-      Navigator.of(context).pop();
+      // カメラ/ギャラリーを開く前の自動保存(_autosaveBeforeLeavingApp)で
+      // 空のメモ行が既に作られてしまっている場合、そのまま画面を閉じると
+      // 空のメモが一覧に残ってしまう。何も選ばずキャンセルした場合が
+      // これにあたるので、後始末として削除しておく。
+      if (_createdMemoRow) {
+        // 追加してすぐ削除した画像・動画があれば(DB行はメモ削除の
+        // ON DELETE CASCADE で消えるが)ファイルは個別に消す必要がある。
+        for (final image in _initialImages) {
+          await _imageService.deleteFile(image.path);
+        }
+        await _repository.deleteMemo(original.id);
+      }
+      if (mounted) Navigator.of(context).pop();
       return;
     }
 
@@ -434,6 +450,13 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       return;
     }
 
+    // カメラ/ギャラリーを開いている間は他アプリが前面に出るため、端末の
+    // メモリ状況によってはこのアプリのプロセスごと一時的に破棄され、
+    // 戻ってきたときに編集中の内容(このメモ自体や、直前に追加した
+    // 別の写真・動画)が失われることがある(特にカメラ撮影で起きやすい)。
+    // それを防ぐため、ピッカーを開く前に現在の内容を先に保存しておく。
+    await _autosaveBeforeLeavingApp();
+
     setState(() => _isPickingImages = true);
     try {
       final picked = <XFile>[];
@@ -455,16 +478,22 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       }
       for (final file in picked) {
         final path = await _imageService.importImage(file);
-        _images.add(
-          MemoImage(
-            id: _uuid.v4(),
-            memoId: original.id,
-            path: path,
-            sortOrder: _images.length,
-            createdAt: DateTime.now(),
-            type: type,
-          ),
+        final image = MemoImage(
+          id: _uuid.v4(),
+          memoId: original.id,
+          path: path,
+          sortOrder: _images.length,
+          createdAt: DateTime.now(),
+          type: type,
         );
+        // _save() まで待たず、ピッカーから戻った直後にすぐ DB にも
+        // 書き込んでおく。理由は上と同じ: 続けてもう1つ(写真の次に動画、
+        // など)追加しようとカメラ/ギャラリーを再度開いた際に状態が
+        // 失われても、既に追加したものまで一緒に消えないようにするため。
+        await _imageRepository.insertImage(image);
+        _images.add(image);
+        _initialImages.add(image);
+        _initialImageIds.add(image.id);
       }
     } catch (e) {
       if (mounted) {
@@ -473,6 +502,38 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       }
     } finally {
       if (mounted) setState(() => _isPickingImages = false);
+    }
+  }
+
+  /// 外部アプリ(カメラ・ギャラリー)を開く直前に、現在編集中の内容を
+  /// 保存しておく。プロセスが一時的に破棄されても、ここまでの入力・
+  /// 添付が失われないようにするための保険。
+  Future<void> _autosaveBeforeLeavingApp() async {
+    final original = _original;
+    if (original == null) return;
+    // 新規メモでまだ一度も保存されていない場合、ここで先行して行を
+    // 作ることになる。結局何も追加されなかったときに空のメモとして
+    // 残ってしまわないよう、_save() 側で後始末できるように記録しておく。
+    if (widget.memoId == null && !_saved) {
+      _createdMemoRow = true;
+    }
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    final memo = original.copyWith(
+      title: title,
+      content: content,
+      genreId: _selectedGenreId,
+      clearGenre: _selectedGenreId == null,
+      audioPath: _audioPath,
+      audioDurationMs: _audioDurationMs,
+      clearAudio: _audioPath == null,
+    );
+    try {
+      await context.read<MemoProvider>().saveMemo(memo);
+    } catch (_) {
+      // 自動保存に失敗しても、ここでは通知せずにピッカーの起動は
+      // 続行する(最終的な保存は _save() 側でも試みられ、失敗すれば
+      // そちらでエラー表示される)。
     }
   }
 
