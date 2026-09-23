@@ -830,11 +830,19 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       return const SizedBox.shrink();
     }
 
+    // 本文入力中(キーボード表示中)は、写真・動画・音声のカードが
+    // 縦に積み上がって入力欄を圧迫してしまう(「メモしづらい」との
+    // フィードバックあり)。削除ボタン・追加タイルなど今すぐ使わない
+    // 操作を隠し、サムネイルを小さくして高さを抑える。何が添付されて
+    // いるか自体は本文入力中も見えたままにしておく(消すと不安になる)。
+    final compact = _contentFocusNode.hasFocus;
+    final thumbSize = compact ? 44.0 : 80.0;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(compact ? 6 : 12),
         child: SizedBox(
-          height: 88,
+          height: thumbSize,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
@@ -850,61 +858,63 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                           borderRadius: BorderRadius.circular(8),
                           child: image.isVideo
                               ? Container(
-                                  width: 80,
-                                  height: 80,
+                                  width: thumbSize,
+                                  height: thumbSize,
                                   color: Colors.black87,
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.play_circle_outline,
                                     color: Colors.white,
-                                    size: 32,
+                                    size: compact ? 20 : 32,
                                   ),
                                 )
                               : Image.file(
                                   File(image.path),
-                                  width: 80,
-                                  height: 80,
+                                  width: thumbSize,
+                                  height: thumbSize,
                                   fit: BoxFit.cover,
                                 ),
                         ),
                       ),
-                      Positioned(
-                        top: -8,
-                        right: -8,
-                        child: IconButton(
-                          icon: const Icon(Icons.cancel),
-                          iconSize: 20,
-                          color: Colors.black54,
-                          onPressed: () => _removeImage(image),
+                      if (!compact)
+                        Positioned(
+                          top: -8,
+                          right: -8,
+                          child: IconButton(
+                            icon: const Icon(Icons.cancel),
+                            iconSize: 20,
+                            color: Colors.black54,
+                            onPressed: () => _removeImage(image),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
-              GestureDetector(
-                onTap: _isPickingImages ? null : _pickImagesFromButton,
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outlineVariant,
+              if (!compact)
+                GestureDetector(
+                  onTap: _isPickingImages ? null : _pickImagesFromButton,
+                  child: Container(
+                    width: thumbSize,
+                    height: thumbSize,
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _isPickingImages
-                      ? const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                    child: _isPickingImages
+                        ? const Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : Icon(
+                            Icons.add_photo_alternate_outlined,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
-                        )
-                      : Icon(
-                          Icons.add_photo_alternate_outlined,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -935,9 +945,13 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       );
     }
 
+    // 画像セクションと同様、本文入力中は再生バー・文字起こしボタンなど
+    // 今すぐ使わない操作を隠し、再生/一時停止と削除だけの1行に畳む。
+    final compact = _contentFocusNode.hasFocus;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(compact ? 8 : 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -948,33 +962,44 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                     icon: Icon(
                       _isPlaying ? Icons.pause_circle : Icons.play_circle,
                     ),
-                    iconSize: 36,
+                    iconSize: compact ? 28 : 36,
                     onPressed: _togglePlayback,
                   ),
-                  Expanded(
-                    child: _PlaybackSlider(playbackService: _playbackService),
-                  ),
+                  if (compact)
+                    const Expanded(
+                      child: Text(
+                        '音声メモ',
+                        style: TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: _PlaybackSlider(playbackService: _playbackService),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline),
+                    iconSize: compact ? 20 : 24,
                     tooltip: '録音を削除',
                     onPressed: _confirmDeleteAudio,
                   ),
                 ],
               ),
-              Align(
-                alignment: Alignment.center,
-                child: TextButton.icon(
-                  onPressed: _isTranscribing ? null : _transcribe,
-                  icon: _isTranscribing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.subtitles_outlined),
-                  label: Text(_isTranscribing ? '文字起こし中…' : '文字起こしする(オフライン)'),
+              if (!compact)
+                Align(
+                  alignment: Alignment.center,
+                  child: TextButton.icon(
+                    onPressed: _isTranscribing ? null : _transcribe,
+                    icon: _isTranscribing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.subtitles_outlined),
+                    label: Text(_isTranscribing ? '文字起こし中…' : '文字起こしする(オフライン)'),
+                  ),
                 ),
-              ),
             ] else if (_isRecording)
               _RecordingControls(
                 audioService: _audioService,
