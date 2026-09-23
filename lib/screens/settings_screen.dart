@@ -20,6 +20,37 @@ import 'trash_screen.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  /// バックアップの作成・復元は(特に動画添付を含む場合)ZIP圧縮や
+  /// AES-GCM暗号化で数秒かかることがある。何も表示しないと固まって
+  /// 見えてしまうため、処理中はこの操作ブロック用ダイアログを出す。
+  /// バックボタンでも閉じられないようにし(canPop: false)、必ず
+  /// 呼び出し側の navigator.pop() だけで閉じる前提を保証する。
+  static void _showBlockingProgressDialog(
+    BuildContext context,
+    String message,
+  ) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 16),
+              Expanded(child: Text(message)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _exportAllMemos(BuildContext context) async {
     final memos = await MemoRepository().fetchMemos();
     final genres = await GenreRepository().fetchGenres();
@@ -34,8 +65,11 @@ class SettingsScreen extends StatelessWidget {
 
   Future<void> _createBackup(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    _showBlockingProgressDialog(context, 'バックアップを作成しています…');
     try {
       final (bytes, fileName) = await BackupService().createBackupBytes();
+      navigator.pop();
       // 共有シートではなく「保存先を選ぶ」ダイアログ(SAF の
       // ACTION_CREATE_DOCUMENT)を使う。ここには Google ドライブや端末の
       // ストレージなど保存先のみが並び、LINE 等のメッセージ/SNSアプリは
@@ -53,6 +87,7 @@ class SettingsScreen extends StatelessWidget {
         messenger.showSnackBar(const SnackBar(content: Text('バックアップを保存しました')));
       }
     } catch (_) {
+      navigator.pop();
       if (!context.mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text('バックアップの作成に失敗しました')));
     }
@@ -99,9 +134,11 @@ class SettingsScreen extends StatelessWidget {
 
     if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
     final memoProvider = context.read<MemoProvider>();
     final genreProvider = context.read<GenreProvider>();
 
+    _showBlockingProgressDialog(context, 'バックアップから復元しています…');
     try {
       final bytes = await picked.readAsBytes();
       final (memoCount, genreCount) = await BackupService().restoreFromBackup(
@@ -109,14 +146,18 @@ class SettingsScreen extends StatelessWidget {
       );
       await genreProvider.load();
       await memoProvider.load();
+      navigator.pop();
       messenger.showSnackBar(
         SnackBar(content: Text('メモ $memoCount 件、ジャンル $genreCount 件を復元しました')),
       );
     } on UnsupportedBackupVersionException catch (e) {
+      navigator.pop();
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } on InvalidBackupFileException catch (e) {
+      navigator.pop();
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
+      navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('復元に失敗しました')));
     }
   }

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart' show Color;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -90,6 +91,96 @@ const List<int> _backupEncryptionKeyBytes = [
 const List<int> _encryptedBackupMagic = [0x54, 0x4D, 0x45, 0x42];
 const int _encryptionFormatVersion = 1;
 
+/// [compute] に渡す ZIP 内の1エントリ(パスとバイト列)。
+class _ZipEntryData {
+  const _ZipEntryData(this.path, this.bytes);
+  final String path;
+  final Uint8List bytes;
+}
+
+class _CreateZipArgs {
+  const _CreateZipArgs(this.entries, this.jsonBytes);
+  final List<_ZipEntryData> entries;
+  final Uint8List jsonBytes;
+}
+
+/// [compute] 用トップレベル関数: ZIP圧縮とAES-GCM暗号化はいずれも
+/// バックアップ対象のファイルサイズに比例して重くなる処理で、動画添付を
+/// 含むバックアップではメインisolate(=UIスレッド)上で実行すると体感できる
+/// フリーズを起こしうる。まとめてバックグラウンドisolateで行う。
+///
+/// トップレベル関数(またはstaticメソッド)である必要がある: compute() は
+/// 関数そのものを別isolateに渡して実行するため、クロージャやインスタンス
+/// メソッドは使えない。_backupEncryptionKeyBytes 等のトップレベル定数は
+/// 同じプログラムが読み込まれた新しいisolateでもそのまま参照できるため、
+/// 引数として渡す必要はない。
+Future<Uint8List> _buildEncryptedBackupZip(_CreateZipArgs args) async {
+  final archive = Archive();
+  for (final entry in args.entries) {
+    archive.addFile(ArchiveFile(entry.path, entry.bytes.length, entry.bytes));
+  }
+  archive.addFile(
+    ArchiveFile('backup.json', args.jsonBytes.length, args.jsonBytes),
+  );
+
+  final zipBytes = ZipEncoder().encode(archive);
+  if (zipBytes == null) {
+    throw StateError('バックアップの作成に失敗しました');
+  }
+
+  final secretKey = SecretKey(_backupEncryptionKeyBytes);
+  final secretBox = await AesGcm.with256bits().encrypt(
+    zipBytes,
+    secretKey: secretKey,
+  );
+  return Uint8List.fromList([
+    ..._encryptedBackupMagic,
+    _encryptionFormatVersion,
+    ...secretBox.nonce,
+    ...secretBox.mac.bytes,
+    ...secretBox.cipherText,
+  ]);
+}
+
+class _DecryptArgs {
+  const _DecryptArgs(this.cipherText, this.nonce, this.mac);
+  final Uint8List cipherText;
+  final Uint8List nonce;
+  final Uint8List mac;
+}
+
+/// [compute] 用トップレベル関数: AES-GCM復号本体(重い部分)だけを
+/// バックグラウンドisolateに任せる。ヘッダ解析やバージョンチェックは
+/// 軽い処理なので [BackupService._decryptBytes] 側(メインisolate)で行う。
+Future<Uint8List> _decryptCipherText(_DecryptArgs args) async {
+  final secretKey = SecretKey(_backupEncryptionKeyBytes);
+  final secretBox = SecretBox(
+    args.cipherText,
+    nonce: args.nonce,
+    mac: Mac(args.mac),
+  );
+  final plainBytes = await AesGcm.with256bits().decrypt(
+    secretBox,
+    secretKey: secretKey,
+  );
+  return Uint8List.fromList(plainBytes);
+}
+
+/// [compute] 用トップレベル関数: ZIP展開(解凍)も元ファイルサイズに比例して
+/// 重い処理なので、バックグラウンドisolateで行う。[Archive]/[ArchiveFile]
+/// オブジェクトそのものではなく、中身(パス→バイト列)だけを取り出して
+/// 返す(isolateをまたいで受け渡すデータの形を単純に保つため)。
+Map<String, Uint8List> _decodeZipEntries(Uint8List zipBytes) {
+  final archive = ZipDecoder().decodeBytes(zipBytes);
+  final result = <String, Uint8List>{};
+  for (final file in archive.files) {
+    if (file.isFile) {
+      result[file.name] = Uint8List.fromList(file.content as List<int>);
+    }
+  }
+  return result;
+}
+
 /// メモ・ジャンル・録音データをまとめてバックアップ/復元するサービス。
 ///
 /// バックアップの中身は ZIP ファイル1つにまとめる: メモ・ジャンルの
@@ -126,7 +217,7 @@ class BackupService {
     final genres = await _genreRepository.fetchGenres();
     final memos = await _memoRepository.fetchMemos();
 
-    final archive = Archive();
+    final zipEntries = <_ZipEntryData>[];
     final audioFileByMemoId = <String, String>{};
     final imagesByMemoId = <String, List<Map<String, Object?>>>{};
 
@@ -136,7 +227,7 @@ class BackupService {
       if (!await file.exists()) continue;
       final zipPath = 'audio/${p.basename(memo.audioPath!)}';
       final bytes = await file.readAsBytes();
-      archive.addFile(ArchiveFile(zipPath, bytes.length, bytes));
+      zipEntries.add(_ZipEntryData(zipPath, bytes));
       audioFileByMemoId[memo.id] = zipPath;
     }
 
@@ -149,7 +240,7 @@ class BackupService {
         if (!await file.exists()) continue;
         final zipPath = 'images/${image.id}${p.extension(image.path)}';
         final bytes = await file.readAsBytes();
-        archive.addFile(ArchiveFile(zipPath, bytes.length, bytes));
+        zipEntries.add(_ZipEntryData(zipPath, bytes));
         entries.add({
           'file': zipPath,
           'sortOrder': image.sortOrder,
@@ -185,14 +276,13 @@ class BackupService {
     };
 
     final jsonBytes = utf8.encode(jsonEncode(data));
-    archive.addFile(ArchiveFile('backup.json', jsonBytes.length, jsonBytes));
 
-    final zipBytes = ZipEncoder().encode(archive);
-    if (zipBytes == null) {
-      throw StateError('バックアップの作成に失敗しました');
-    }
-
-    final encrypted = await _encryptBytes(zipBytes);
+    // ZIP圧縮とAES暗号化はバックグラウンドisolateにまとめて任せる
+    // (_buildEncryptedBackupZip 参照)。
+    final encrypted = await compute(
+      _buildEncryptedBackupZip,
+      _CreateZipArgs(zipEntries, Uint8List.fromList(jsonBytes)),
+    );
     // 拡張子は .zip のままにする(中身はもう valid な zip ではないが)。
     // Android の保存/選択ダイアログは .tmbackup のような独自拡張子だと
     // MIME タイプを解決できず、保存時にファイル名が化けたり、復元時の
@@ -218,23 +308,22 @@ class BackupService {
         ? await _decryptBytes(bytes)
         : bytes;
 
-    final Archive archive;
+    // ZIP展開もバックグラウンドisolateで行う(_decodeZipEntries 参照)。
+    final Map<String, Uint8List> zipEntries;
     try {
-      archive = ZipDecoder().decodeBytes(zipBytes);
+      zipEntries = await compute(_decodeZipEntries, zipBytes);
     } catch (_) {
       throw const InvalidBackupFileException('このファイルはバックアップとして読み取れませんでした');
     }
 
-    final jsonEntries = archive.files.where((f) => f.name == 'backup.json');
-    if (jsonEntries.isEmpty) {
+    final jsonBytesEntry = zipEntries['backup.json'];
+    if (jsonBytesEntry == null) {
       throw const InvalidBackupFileException('このファイルは手もとメモのバックアップではないようです');
     }
 
     final Map<String, dynamic> data;
     try {
-      data = jsonDecode(
-        utf8.decode(jsonEntries.first.content as List<int>),
-      ) as Map<String, dynamic>;
+      data = jsonDecode(utf8.decode(jsonBytesEntry)) as Map<String, dynamic>;
     } catch (_) {
       throw const InvalidBackupFileException('バックアップファイルの内容を読み取れませんでした');
     }
@@ -267,10 +356,10 @@ class BackupService {
       String? restoredAudioPath;
       final audioFileInZip = memoMap['audioFile'] as String?;
       if (audioFileInZip != null) {
-        final match = archive.files.where((f) => f.name == audioFileInZip);
-        if (match.isNotEmpty) {
+        final audioBytes = zipEntries[audioFileInZip];
+        if (audioBytes != null) {
           final outPath = p.join(audioDir.path, p.basename(audioFileInZip));
-          await File(outPath).writeAsBytes(match.first.content as List<int>);
+          await File(outPath).writeAsBytes(audioBytes);
           restoredAudioPath = outPath;
         }
       }
@@ -300,10 +389,10 @@ class BackupService {
         final imageMap = imagesJson[i] as Map<String, dynamic>;
         final fileInZip = imageMap['file'] as String?;
         if (fileInZip == null) continue;
-        final match = archive.files.where((f) => f.name == fileInZip);
-        if (match.isEmpty) continue;
+        final imageBytes = zipEntries[fileInZip];
+        if (imageBytes == null) continue;
         final outPath = p.join(imagesDir.path, p.basename(fileInZip));
-        await File(outPath).writeAsBytes(match.first.content as List<int>);
+        await File(outPath).writeAsBytes(imageBytes);
         await _imageRepository.insertImage(
           MemoImage(
             id: p.basenameWithoutExtension(fileInZip),
@@ -332,22 +421,10 @@ class BackupService {
 
   /// コンテナ形式: マジック(4) + フォーマットバージョン(1) + nonce(12) +
   /// MAC(16) + 暗号文。固定鍵なので salt は不要。
-  Future<Uint8List> _encryptBytes(List<int> plainBytes) async {
-    final secretKey = SecretKey(_backupEncryptionKeyBytes);
-    final secretBox = await AesGcm.with256bits().encrypt(
-      plainBytes,
-      secretKey: secretKey,
-    );
-
-    return Uint8List.fromList([
-      ..._encryptedBackupMagic,
-      _encryptionFormatVersion,
-      ...secretBox.nonce,
-      ...secretBox.mac.bytes,
-      ...secretBox.cipherText,
-    ]);
-  }
-
+  ///
+  /// ヘッダ解析・バージョンチェックは軽い処理なのでここ(メインisolate)で
+  /// 行い、重いAES-GCM復号本体だけ [_decryptCipherText] としてバック
+  /// グラウンドisolateに任せる。
   Future<Uint8List> _decryptBytes(Uint8List bytes) async {
     try {
       var offset = _encryptedBackupMagic.length;
@@ -368,13 +445,10 @@ class BackupService {
       offset += macLength;
       final cipherText = bytes.sublist(offset);
 
-      final secretKey = SecretKey(_backupEncryptionKeyBytes);
-      final secretBox = SecretBox(cipherText, nonce: nonce, mac: Mac(mac));
-      final plainBytes = await AesGcm.with256bits().decrypt(
-        secretBox,
-        secretKey: secretKey,
+      return await compute(
+        _decryptCipherText,
+        _DecryptArgs(cipherText, nonce, mac),
       );
-      return Uint8List.fromList(plainBytes);
     } on UnsupportedBackupVersionException {
       rethrow;
     } catch (_) {
