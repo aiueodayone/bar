@@ -36,7 +36,8 @@ const List<_OnboardingPage> _kPages = [
     icon: Icons.subtitles_outlined,
     title: '声で残して、\n文字にして整理',
     description:
-        '思いついたことをすぐ声で録音。オフラインの文字起こしでテキスト化し、'
+        '思いついたことをすぐ声で録音。写真や動画も一緒に添付できます。'
+        'オフラインの文字起こしでテキスト化し、'
         'ジャンル分けと検索で後から迷わず見つけられます。',
   ),
   _OnboardingPage(
