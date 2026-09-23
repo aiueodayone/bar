@@ -47,8 +47,16 @@ class DatabaseHelper {
         // として同じディスク上の DB ファイルを開くため、同時書き込みが
         // 稀に SQLITE_BUSY("database is locked")で即座に失敗することが
         // ある。busy_timeout を設定し、ロックが空くまで少し待ってから
-        // 再試行させることでこれを避ける(実機の sqflite でも無害)。
-        await db.execute('PRAGMA busy_timeout = 5000');
+        // 再試行させることでこれを避ける。
+        //
+        // 重要: 実機の Android では db.execute() で PRAGMA busy_timeout を
+        // 実行すると
+        // "Queries can be performed using SQLiteDatabase query or rawQuery
+        // methods only." で必ず失敗する(= DBを開くたびに毎回失敗し、保存も
+        // 何もできなくなる致命的な回帰を一度実際に起こした)。busy_timeout は
+        // 値を1行返す形式の PRAGMA のため、Android の SQLiteDatabase は
+        // execSQL() 経由の実行を拒否する。rawQuery() 経由なら問題ない。
+        await db.rawQuery('PRAGMA busy_timeout = 5000');
       },
       onCreate: (db, version) async {
         await db.execute('''

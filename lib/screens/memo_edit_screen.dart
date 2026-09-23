@@ -37,6 +37,7 @@ class MemoEditScreen extends StatefulWidget {
 class _MemoEditScreenState extends State<MemoEditScreen> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
+  final _contentFocusNode = FocusNode();
   final _repository = MemoRepository();
   final _imageRepository = MemoImageRepository();
   final _audioService = AudioService();
@@ -77,6 +78,12 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     // 再ビルドしないよう _PlaybackSlider 側で個別に購読・保持する。
     _playbackCompleteSub = _playbackService.onComplete.listen((_) {
       if (mounted) setState(() => _isPlaying = false);
+    });
+    // 本文欄の入力中はキーボードで画面が狭くなるため、添付ボタンの
+    // 大きなカードを畳んで邪魔にならないようにする(フォーカスが外れたら
+    // 元に戻す)。
+    _contentFocusNode.addListener(() {
+      if (mounted) setState(() {});
     });
   }
 
@@ -119,6 +126,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     }
     _titleController.dispose();
     _contentController.dispose();
+    _contentFocusNode.dispose();
     _audioService.dispose();
     _playbackService.dispose();
     _transcriptionService.dispose();
@@ -304,9 +312,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       // ここで画面を閉じてしまうと入力内容がそのまま失われるので、
       // 閉じずに編集画面に留まらせる(再試行できるように)。
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('保存に失敗しました: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('保存に失敗しました: $e')));
       }
       return;
     }
@@ -337,9 +344,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     // カメラでの撮影(特に動画)はマイクも使うため、音声メモの録音中に
     // 開いてしまうと録音がカメラアプリ側に横取りされて壊れる恐れがある。
     if (_isRecording) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('録音中は写真・動画を追加できません')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('録音中は写真・動画を追加できません')));
       return;
     }
 
@@ -409,9 +415,8 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('追加できませんでした: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('追加できませんでした: $e')));
       }
     } finally {
       if (mounted) setState(() => _isPickingImages = false);
@@ -600,91 +605,105 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
             IconButton(icon: const Icon(Icons.check), onPressed: _save),
           ],
         ),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('未分類'),
-                        selected: _selectedGenreId == null,
-                        onSelected: (_) =>
-                            setState(() => _selectedGenreId = null),
-                      ),
-                      for (final genre in genreProvider.genres)
+        body: GestureDetector(
+          // 本文欄などの外側をタップしたらキーボードを閉じる。デフォルトの
+          // ままだと、一度入力を始めるとキーボードを下げる手段が
+          // (戻る操作くらいしか)無かったため。
+          onTap: () => FocusScope.of(context).unfocus(),
+          behavior: HitTestBehavior.translucent,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
                         ChoiceChip(
-                          avatar: CircleAvatar(
-                            backgroundColor: genre.color,
-                            radius: 6,
-                          ),
-                          label: Text(genre.name),
-                          selected: _selectedGenreId == genre.id,
+                          label: const Text('未分類'),
+                          selected: _selectedGenreId == null,
                           onSelected: (_) =>
-                              setState(() => _selectedGenreId = genre.id),
+                              setState(() => _selectedGenreId = null),
                         ),
-                      ActionChip(
-                        avatar: const Icon(Icons.add, size: 16),
-                        label: const Text('新規ジャンル'),
-                        onPressed: () async {
-                          final created = await showGenreEditDialog(context);
-                          if (created != null && mounted) {
-                            setState(() => _selectedGenreId = created.id);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _titleController,
-                    decoration: const InputDecoration(
-                      hintText: 'タイトル',
-                      border: InputBorder.none,
+                        for (final genre in genreProvider.genres)
+                          ChoiceChip(
+                            avatar: CircleAvatar(
+                              backgroundColor: genre.color,
+                              radius: 6,
+                            ),
+                            label: Text(genre.name),
+                            selected: _selectedGenreId == genre.id,
+                            onSelected: (_) =>
+                                setState(() => _selectedGenreId = genre.id),
+                          ),
+                        ActionChip(
+                          avatar: const Icon(Icons.add, size: 16),
+                          label: const Text('新規ジャンル'),
+                          onPressed: () async {
+                            final created = await showGenreEditDialog(context);
+                            if (created != null && mounted) {
+                              setState(() => _selectedGenreId = created.id);
+                            }
+                          },
+                        ),
+                      ],
                     ),
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const Divider(),
-                ],
-              ),
-            ),
-            // 本文欄は外側を ListView にせず、ここだけ独立してスクロール
-            // させる。文字量が多いメモで、外側のスクロール領域の高さ計算に
-            // 本文の再レイアウトが毎回波及しないようにするため。
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _contentController,
-                  decoration: const InputDecoration(
-                    hintText: '内容を入力…',
-                    border: InputBorder.none,
-                  ),
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(
+                        hintText: 'タイトル',
+                        border: InputBorder.none,
+                      ),
+                      style: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const Divider(),
+                  ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildImagesSection(context),
-                  const SizedBox(height: 8),
-                  _buildAudioSection(context),
-                ],
+              // 本文欄は外側を ListView にせず、ここだけ独立してスクロール
+              // させる。文字量が多いメモで、外側のスクロール領域の高さ計算に
+              // 本文の再レイアウトが毎回波及しないようにするため。
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: _contentController,
+                    focusNode: _contentFocusNode,
+                    decoration: const InputDecoration(
+                      hintText: '内容を入力…',
+                      border: InputBorder.none,
+                    ),
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                  ),
+                ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildImagesSection(
+                      context,
+                      compact: _contentFocusNode.hasFocus,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildAudioSection(
+                      context,
+                      compact: _contentFocusNode.hasFocus,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         // body の Column ではなく bottomNavigationBar に置く。録音ボタンの
         // すぐ下に固定表示されつつ、Scaffold のレイアウト計算に乗るため、
@@ -694,11 +713,14 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     );
   }
 
-  Widget _buildImagesSection(BuildContext context) {
+  Widget _buildImagesSection(BuildContext context, {required bool compact}) {
     // 「音声メモを録音」ボタン(_buildAudioSection の空状態)と見た目を
     // 揃える: Card の中に、丸いアイコン+ラベルを1つのタップ領域として
     // 置く。
     if (_images.isEmpty && !_isPickingImages) {
+      // 本文入力中はキーボードで画面が狭くなるので、何も付いていない
+      // ときの「追加を誘う」カードは畳んで場所を空ける。
+      if (compact) return const SizedBox.shrink();
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -822,7 +844,17 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     );
   }
 
-  Widget _buildAudioSection(BuildContext context) {
+  Widget _buildAudioSection(BuildContext context, {required bool compact}) {
+    // 本文入力中はキーボードで画面が狭くなるので、何も録っていない/
+    // ダウンロード中でもないときの「録音を誘う」カードは畳んで場所を
+    // 空ける。録音中やダウンロード中は操作(停止ボタン等)が必要なので
+    // 畳まない。
+    if (compact &&
+        !_isDownloadingModel &&
+        _audioPath == null &&
+        !_isRecording) {
+      return const SizedBox.shrink();
+    }
     if (_isDownloadingModel) {
       return Card(
         child: Padding(
