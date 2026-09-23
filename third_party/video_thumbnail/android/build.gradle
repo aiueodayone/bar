@@ -1,0 +1,44 @@
+group 'xyz.justsoft.video_thumbnail'
+version '1.0-SNAPSHOT'
+
+// pub.dev の video_thumbnail 0.5.6 は AGP 4.1.0 + jcenter() を直接
+// 指定しており、そのままでは (1) jcenter() が既に停止済みで解決不能、
+// (2) 現行の Flutter Gradle プラグインが AGP 4.1.0 のプロジェクトを
+// 読もうとして NullPointerException で落ちる('kotlin-android' plugin
+// requires one of the Android Gradle plugins エラー)、という2つの理由で
+// ビルドが通らない。third_party/vosk_flutter と同じ理由・同じ対処で
+// ローカルにベンダリングし、この build.gradle だけ現行ツールチェーンと
+// 噛み合うバージョンに差し替えている(vosk_flutter が実際に AGP 7.0.3 +
+// mavenCentral() で問題なくビルドできているので、それに合わせた)。
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.0.3'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    compileSdk 33
+    namespace 'xyz.justsoft.video_thumbnail'
+
+    defaultConfig {
+        minSdkVersion 16
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+    lintOptions {
+        disable 'InvalidPackage'
+    }
+}
