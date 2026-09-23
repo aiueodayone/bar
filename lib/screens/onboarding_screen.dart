@@ -241,7 +241,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Text(
             '音声メモを文字にするための、日本語の音声認識モデル(約50MB)を'
             '今ダウンロードしておくことができます。あとからメモ編集画面で'
-            'ダウンロードすることもできるので、今はスキップしても構いません。',
+            'ダウンロードすることもできるので、今はスキップしても構いません。'
+            'データ通信量がかかるため、Wi-Fi環境でのダウンロードをおすすめします。',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge,
           ),
