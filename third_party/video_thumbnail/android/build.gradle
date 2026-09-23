@@ -31,7 +31,10 @@ rootProject.allprojects {
 apply plugin: 'com.android.library'
 
 android {
-    compileSdk 33
+    // 33 のままだと、androidx.lifecycle 等の推移的依存が要求する
+    // 「compileSdk 34+」を満たせず CheckAarMetadataTask でビルドが失敗する
+    // (実機のアプリ本体は compileSdk 36 でビルドしているので、それに合わせる)。
+    compileSdk 36
     namespace 'xyz.justsoft.video_thumbnail'
 
     defaultConfig {
