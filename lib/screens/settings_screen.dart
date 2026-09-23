@@ -116,7 +116,9 @@ class SettingsScreen extends StatelessWidget {
         title: const Text('バックアップから復元しますか?'),
         content: const Text(
           '選択したバックアップの内容を読み込みます。既存のメモは削除されず、'
-          '同じメモがあれば上書き、無ければ追加されます。',
+          '同じメモがあれば上書き、無ければ追加されます。\n\n'
+          '写真・動画が多く含まれる場合、復元に数十秒〜数分かかることが'
+          'あります。',
         ),
         actions: [
           TextButton(
@@ -300,13 +302,19 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.backup_outlined),
             title: const Text('バックアップを作成'),
-            subtitle: const Text('メモ・ジャンル・録音データをまとめて保存先を選んで保存します'),
+            subtitle: const Text(
+              'メモ・ジャンル・録音・写真・動画をまとめて保存先を選んで保存します'
+              '(写真・動画が多いと数十秒〜数分かかることがあります)',
+            ),
             onTap: () => _createBackup(context),
           ),
           ListTile(
             leading: const Icon(Icons.settings_backup_restore),
             title: const Text('バックアップから復元'),
-            subtitle: const Text('保存しておいたバックアップファイルからメモを復元します'),
+            subtitle: const Text(
+              '保存しておいたバックアップファイルからメモを復元します'
+              '(写真・動画が多いと数十秒〜数分かかることがあります)',
+            ),
             onTap: () => _restoreBackup(context),
           ),
           ListTile(

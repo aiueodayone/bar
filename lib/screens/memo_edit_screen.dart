@@ -66,6 +66,11 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   List<MemoImage> _initialImages = [];
   Set<String> _initialImageIds = {};
   bool _isPickingImages = false;
+  // 動画サムネイルは生成に多少時間がかかるため、画像IDごとにFutureを
+  // キャッシュしておく。build() のたびに新しい Future を作ってしまうと、
+  // 生成済みでもそのたびに FutureBuilder が一瞬ローディング表示に戻って
+  // ちらつく。
+  final Map<String, Future<String?>> _videoThumbnailFutures = {};
 
   bool _isPlaying = false;
   StreamSubscription<void>? _playbackCompleteSub;
@@ -560,7 +565,15 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     if (!_initialImageIds.contains(image.id)) {
       await _imageService.deleteFile(image.path);
     }
+    _videoThumbnailFutures.remove(image.id);
     setState(() => _images.removeWhere((i) => i.id == image.id));
+  }
+
+  Future<String?> _videoThumbnailFuture(MemoImage image) {
+    return _videoThumbnailFutures.putIfAbsent(
+      image.id,
+      () => _imageService.ensureVideoThumbnail(image.path),
+    );
   }
 
   Future<void> _viewImage(MemoImage image) async {
@@ -607,56 +620,81 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
     final hasText = title.isNotEmpty || content.isNotEmpty;
-    if (!hasText && _audioPath == null) return;
+    final hasAudio = _audioPath != null;
+    final hasAttachments = _images.isNotEmpty;
+    if (!hasText && !hasAudio && !hasAttachments) return;
 
-    var choice = 'text';
-    if (_audioPath != null && hasText) {
-      final picked = await showModalBottomSheet<String>(
+    var shareText = hasText;
+    var shareAudio = hasAudio;
+    var shareAttachments = hasAttachments;
+
+    // 選べる種類が2つ以上あるときだけ、何を共有するか選ばせる
+    // (テキストだけ、音声だけ、のように1種類しかなければ即座に共有する)。
+    final optionCount = [
+      hasText,
+      hasAudio,
+      hasAttachments,
+    ].where((v) => v).length;
+    if (optionCount > 1) {
+      final confirmed = await showDialog<bool>(
         context: context,
-        builder: (sheetContext) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.text_snippet_outlined),
-                title: const Text('テキストを共有'),
-                onTap: () => Navigator.of(sheetContext).pop('text'),
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('共有する内容を選択'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasText)
+                  CheckboxListTile(
+                    value: shareText,
+                    title: const Text('テキスト(タイトル・本文)'),
+                    onChanged: (v) =>
+                        setDialogState(() => shareText = v ?? false),
+                  ),
+                if (hasAudio)
+                  CheckboxListTile(
+                    value: shareAudio,
+                    title: const Text('音声メモ'),
+                    onChanged: (v) =>
+                        setDialogState(() => shareAudio = v ?? false),
+                  ),
+                if (hasAttachments)
+                  CheckboxListTile(
+                    value: shareAttachments,
+                    title: Text('写真・動画(${_images.length}件)'),
+                    onChanged: (v) =>
+                        setDialogState(() => shareAttachments = v ?? false),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('キャンセル'),
               ),
-              ListTile(
-                leading: const Icon(Icons.audiotrack_outlined),
-                title: const Text('音声ファイルを共有'),
-                onTap: () => Navigator.of(sheetContext).pop('audio'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.attach_email_outlined),
-                title: const Text('音声とテキストをまとめて共有'),
-                subtitle: const Text('メールなどに録音ファイルと文字起こし結果を添付します'),
-                onTap: () => Navigator.of(sheetContext).pop('both'),
+              FilledButton(
+                onPressed: (shareText || shareAudio || shareAttachments)
+                    ? () => Navigator.of(dialogContext).pop(true)
+                    : null,
+                child: const Text('共有'),
               ),
             ],
           ),
         ),
       );
-      if (picked == null) return;
-      choice = picked;
-    } else if (_audioPath != null) {
-      choice = 'audio';
+      if (confirmed != true) return;
     }
 
     if (!mounted) return;
+    final genre = context.read<GenreProvider>().byId(_selectedGenreId);
     final memo = _currentMemoSnapshot();
-    switch (choice) {
-      case 'audio':
-        await _exportService.shareMemoAudio(memo);
-        break;
-      case 'both':
-        final genre = context.read<GenreProvider>().byId(_selectedGenreId);
-        await _exportService.shareMemoAudioWithText(memo, genre);
-        break;
-      default:
-        final genre = context.read<GenreProvider>().byId(_selectedGenreId);
-        await _exportService.shareMemoText(memo, genre);
-    }
+    await _exportService.shareMemo(
+      memo: memo,
+      genre: genre,
+      includeText: shareText,
+      includeAudio: shareAudio,
+      images: shareAttachments ? _images : const [],
+    );
   }
 
   Future<void> _delete() async {
@@ -857,14 +895,31 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: image.isVideo
-                              ? Container(
+                              ? SizedBox(
                                   width: thumbSize,
                                   height: thumbSize,
-                                  color: Colors.black87,
-                                  child: Icon(
-                                    Icons.play_circle_outline,
-                                    color: Colors.white,
-                                    size: compact ? 20 : 32,
+                                  child: FutureBuilder<String?>(
+                                    future: _videoThumbnailFuture(image),
+                                    builder: (context, snapshot) {
+                                      final thumbPath = snapshot.data;
+                                      return Stack(
+                                        fit: StackFit.expand,
+                                        alignment: Alignment.center,
+                                        children: [
+                                          Container(color: Colors.black87),
+                                          if (thumbPath != null)
+                                            Image.file(
+                                              File(thumbPath),
+                                              fit: BoxFit.cover,
+                                            ),
+                                          Icon(
+                                            Icons.play_circle_outline,
+                                            color: Colors.white,
+                                            size: compact ? 20 : 32,
+                                          ),
+                                        ],
+                                      );
+                                    },
                                   ),
                                 )
                               : Image.file(

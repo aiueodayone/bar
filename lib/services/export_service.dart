@@ -7,41 +7,33 @@ import 'package:share_plus/share_plus.dart';
 
 import '../models/genre.dart';
 import '../models/memo.dart';
+import '../models/memo_image.dart';
 
 /// メモの共有・エクスポート(端末外への書き出し)を担うサービス。
 class ExportService {
   static final DateFormat _dateFormat = DateFormat('yyyy/MM/dd HH:mm');
 
-  /// 1件のメモをテキストとして共有する(OS標準の共有シートを開く)。
-  Future<void> shareMemoText(Memo memo, Genre? genre) async {
+  /// テキスト・音声・添付画像/動画のうち、選択された組み合わせをまとめて
+  /// 共有する(OS標準の共有シートを開く)。呼び出し側(メモ編集画面)で
+  /// どれを含めるか選ばせてから呼ぶ。
+  Future<void> shareMemo({
+    required Memo memo,
+    Genre? genre,
+    required bool includeText,
+    required bool includeAudio,
+    required List<MemoImage> images,
+  }) async {
+    final files = <XFile>[
+      if (includeAudio && memo.hasAudio) XFile(memo.audioPath!),
+      for (final image in images) XFile(image.path),
+    ];
+    if (!includeText && files.isEmpty) return;
+
     await SharePlus.instance.share(
       ShareParams(
-        text: _buildMemoText(memo, genre),
+        text: includeText ? _buildMemoText(memo, genre) : null,
+        files: files.isEmpty ? null : files,
         subject: memo.title.isEmpty ? 'メモ' : memo.title,
-      ),
-    );
-  }
-
-  /// 音声メモの録音ファイルを共有する。
-  Future<void> shareMemoAudio(Memo memo) async {
-    if (!memo.hasAudio) return;
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(memo.audioPath!)],
-        subject: memo.title.isEmpty ? '音声メモ' : memo.title,
-      ),
-    );
-  }
-
-  /// 音声メモの録音ファイルと、そのテキスト(文字起こし結果を含む)をまとめて
-  /// 共有する。メールなど、添付ファイルと本文を同時に送れる共有先向け。
-  Future<void> shareMemoAudioWithText(Memo memo, Genre? genre) async {
-    if (!memo.hasAudio) return;
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(memo.audioPath!)],
-        text: _buildMemoText(memo, genre),
-        subject: memo.title.isEmpty ? '音声メモ' : memo.title,
       ),
     );
   }

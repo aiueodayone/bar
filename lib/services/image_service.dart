@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 /// メモに添付する画像・動画の取り込み・保存先管理を担うサービス。
 ///
@@ -43,6 +44,43 @@ class ImageService {
     if (await file.exists()) {
       await file.delete();
     }
+    // 動画ならサムネイルも一緒に消す(写真の場合は最初から存在しないので
+    // 単なる no-op)。
+    final thumb = File(_thumbnailPathFor(path));
+    if (await thumb.exists()) {
+      await thumb.delete();
+    }
+  }
+
+  /// 動画のサムネイル画像を生成し、そのファイルパスを返す。既に生成済みなら
+  /// 再生成せずそのパスをそのまま返す(呼び出し側で毎回 [FutureBuilder] の
+  /// future として渡しても、初回以降はファイルの存在確認だけで済む)。
+  ///
+  /// 生成に失敗した場合(壊れた動画・対応していないコーデックなど)は
+  /// null を返す。呼び出し側は再生アイコンだけのプレースホルダーに
+  /// フォールバックすること。
+  Future<String?> ensureVideoThumbnail(String videoPath) async {
+    final thumbPath = _thumbnailPathFor(videoPath);
+    if (await File(thumbPath).exists()) return thumbPath;
+    try {
+      return await VideoThumbnail.thumbnailFile(
+        video: videoPath,
+        thumbnailPath: thumbPath,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 256,
+        quality: 60,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 動画ファイルと同じディレクトリに、拡張子だけ変えた決まったパスを
+  /// 返す(DBにサムネイル用の列を増やさずに済むようにするため)。
+  String _thumbnailPathFor(String videoPath) {
+    final dir = p.dirname(videoPath);
+    final name = p.basenameWithoutExtension(videoPath);
+    return p.join(dir, '$name.thumb.jpg');
   }
 
   Future<Directory> _imagesDirectory() async {
