@@ -149,4 +149,66 @@ void main() {
       expect(images[1].isVideo, isTrue);
     },
   );
+
+  test(
+    're-saving an existing memo (as the edit screen does before opening the '
+    'camera/gallery for each attachment, and again on final save) must not '
+    'wipe its already-attached images/videos',
+    () async {
+      final memoRepository = MemoRepository(dbHelper: dbHelper);
+      final imageRepository = MemoImageRepository(dbHelper: dbHelper);
+      final now = DateTime.now();
+
+      final memo = Memo(
+        id: 'img-memo-4',
+        title: '',
+        content: '',
+        createdAt: now,
+        updatedAt: now,
+      );
+      await memoRepository.upsertMemo(memo);
+
+      // 1枚目(写真)を撮った直後、すぐDBに追加(eager insert)。
+      await imageRepository.insertImage(
+        MemoImage(
+          id: 'img-6',
+          memoId: 'img-memo-4',
+          path: '/tmp/six.jpg',
+          sortOrder: 0,
+          createdAt: now,
+        ),
+      );
+
+      // 2つ目(動画)を追加しようとカメラ/ギャラリーを開く前に、
+      // 編集画面は毎回 _autosaveBeforeLeavingApp() でメモ行を再保存する。
+      // これが memo_images の行を巻き込んで消してしまわないこと。
+      await memoRepository.upsertMemo(memo.copyWith(title: '下書き'));
+
+      expect(
+        (await imageRepository.fetchImagesForMemo('img-memo-4'))
+            .map((i) => i.id),
+        ['img-6'],
+      );
+
+      // 2枚目(動画)が追加された後、insertImage 直後。
+      await imageRepository.insertImage(
+        MemoImage(
+          id: 'img-7',
+          memoId: 'img-memo-4',
+          path: '/tmp/seven.mp4',
+          sortOrder: 1,
+          createdAt: now,
+          type: MemoAttachmentType.video,
+        ),
+      );
+
+      // 最終保存(_save() 側)でもう一度 upsertMemo が呼ばれる。
+      await memoRepository.upsertMemo(memo.copyWith(title: '完成版'));
+
+      final finalImages = await imageRepository.fetchImagesForMemo(
+        'img-memo-4',
+      );
+      expect(finalImages.map((i) => i.id).toList(), ['img-6', 'img-7']);
+    },
+  );
 }

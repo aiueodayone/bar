@@ -81,11 +81,24 @@ class MemoRepository {
 
   Future<void> upsertMemo(Memo memo) async {
     final db = await _dbHelper.database;
-    await db.insert(
+    // ConflictAlgorithm.replace は使わない。既存行との主キー衝突時、
+    // SQLite は「UPDATE」ではなく実際には「既存行を DELETE してから
+    // INSERT」で処理するため、memo_images の
+    // "FOREIGN KEY (memo_id) REFERENCES memos (id) ON DELETE CASCADE"
+    // が発火し、そのメモに添付した画像・動画の行が保存のたびに毎回
+    // 消えてしまう(実機で「写真・動画を追加すると前のものが消える/
+    // 上書きされる」という報告の実際の原因だった)。既存行があれば
+    // UPDATE、なければ INSERT にすることで、行を削除せずに更新し、
+    // カスケード削除を発火させない。
+    final updated = await db.update(
       'memos',
       memo.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: 'id = ?',
+      whereArgs: [memo.id],
     );
+    if (updated == 0) {
+      await db.insert('memos', memo.toMap());
+    }
   }
 
   /// ごみ箱に移動する(deleted_at をセットするだけで、行は残す)。
