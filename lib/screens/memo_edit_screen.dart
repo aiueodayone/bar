@@ -338,17 +338,57 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     }
   }
 
-  Future<void> _pickImages() async {
-    final original = _original;
-    if (original == null) return;
-    // カメラでの撮影(特に動画)はマイクも使うため、音声メモの録音中に
-    // 開いてしまうと録音がカメラアプリ側に横取りされて壊れる恐れがある。
-    if (_isRecording) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('録音中は写真・動画を追加できません')));
+  /// 「音声メモを録音」「写真・動画を追加」の入口を1つにまとめた
+  /// ボトムシート。既に音声が録音済みのときは「音声メモを録音」の
+  /// 選択肢自体を出さない(録音は1メモにつき1つのみのため)。
+  Future<void> _addAttachment() async {
+    final hasAudio = _audioPath != null;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!hasAudio)
+              ListTile(
+                leading: const Icon(Icons.mic_outlined),
+                title: const Text('音声メモを録音'),
+                onTap: () => Navigator.of(sheetContext).pop('audio'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('写真を撮影'),
+              onTap: () => Navigator.of(sheetContext).pop('photo_camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('動画を撮影'),
+              onTap: () => Navigator.of(sheetContext).pop('video_camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('写真をギャラリーから選ぶ'),
+              onTap: () => Navigator.of(sheetContext).pop('photo_gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library_outlined),
+              title: const Text('動画をギャラリーから選ぶ'),
+              onTap: () => Navigator.of(sheetContext).pop('video_gallery'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null) return;
+    if (choice == 'audio') {
+      await _toggleRecording();
       return;
     }
+    await _pickImages(choice);
+  }
 
+  /// 画像一覧の末尾の「+」タイル用(写真・動画のみの選択肢)。
+  Future<void> _pickImagesFromButton() async {
     final source = await showModalBottomSheet<String>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -380,6 +420,19 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       ),
     );
     if (source == null) return;
+    await _pickImages(source);
+  }
+
+  /// カメラでの撮影(特に動画)はマイクも使うため、音声メモの録音中に
+  /// 開いてしまうと録音がカメラアプリ側に横取りされて壊れる恐れがある。
+  Future<void> _pickImages(String source) async {
+    final original = _original;
+    if (original == null) return;
+    if (_isRecording) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('録音中は写真・動画を追加できません')));
+      return;
+    }
 
     setState(() => _isPickingImages = true);
     try {
@@ -690,15 +743,9 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildImagesSection(
-                      context,
-                      compact: _contentFocusNode.hasFocus,
-                    ),
-                    const SizedBox(height: 8),
-                    _buildAudioSection(
-                      context,
-                      compact: _contentFocusNode.hasFocus,
-                    ),
+                    _buildImagesSection(context),
+                    _buildAudioSection(context),
+                    _buildAddAttachmentButton(context),
                   ],
                 ),
               ),
@@ -713,53 +760,12 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     );
   }
 
-  Widget _buildImagesSection(BuildContext context, {required bool compact}) {
-    // 「音声メモを録音」ボタン(_buildAudioSection の空状態)と見た目を
-    // 揃える: Card の中に、丸いアイコン+ラベルを1つのタップ領域として
-    // 置く。
+  Widget _buildImagesSection(BuildContext context) {
+    // 何も付いていないときの「追加を誘う」表示は、音声も含めて統一した
+    // 1つの _buildAddAttachmentButton に譲る。ここでは画像・動画が
+    // 実際にあるときだけ表示する。
     if (_images.isEmpty && !_isPickingImages) {
-      // 本文入力中はキーボードで画面が狭くなるので、何も付いていない
-      // ときの「追加を誘う」カードは畳んで場所を空ける。
-      if (compact) return const SizedBox.shrink();
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(28),
-              onTap: _pickImages,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
-                  horizontal: 16,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(
-                        Icons.add_photo_alternate_outlined,
-                        size: 32,
-                        color: Theme.of(context).colorScheme.onPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text('写真・動画を追加'),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     return Card(
@@ -813,7 +819,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                   ),
                 ),
               GestureDetector(
-                onTap: _isPickingImages ? null : _pickImages,
+                onTap: _isPickingImages ? null : _pickImagesFromButton,
                 child: Container(
                   width: 80,
                   height: 80,
@@ -844,15 +850,10 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     );
   }
 
-  Widget _buildAudioSection(BuildContext context, {required bool compact}) {
-    // 本文入力中はキーボードで画面が狭くなるので、何も録っていない/
-    // ダウンロード中でもないときの「録音を誘う」カードは畳んで場所を
-    // 空ける。録音中やダウンロード中は操作(停止ボタン等)が必要なので
-    // 畳まない。
-    if (compact &&
-        !_isDownloadingModel &&
-        _audioPath == null &&
-        !_isRecording) {
+  Widget _buildAudioSection(BuildContext context) {
+    // 何も録っていない/ダウンロード中でもないときの「録音を誘う」表示は、
+    // 写真・動画も含めて統一した1つの _buildAddAttachmentButton に譲る。
+    if (!_isDownloadingModel && _audioPath == null && !_isRecording) {
       return const SizedBox.shrink();
     }
     if (_isDownloadingModel) {
@@ -916,44 +917,23 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
               _RecordingControls(
                 audioService: _audioService,
                 onStop: _toggleRecording,
-              )
-            else
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(28),
-                  onTap: _toggleRecording,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          alignment: Alignment.center,
-                          child: Icon(
-                            Icons.mic,
-                            size: 32,
-                            color: Theme.of(context).colorScheme.onPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text('音声メモを録音'),
-                      ],
-                    ),
-                  ),
-                ),
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 「音声メモを録音」「写真・動画を追加」を1つにまとめた入口。
+  /// 本文入力中はキーボードで画面が狭くなるので隠す。
+  Widget _buildAddAttachmentButton(BuildContext context) {
+    if (_contentFocusNode.hasFocus) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: _addAttachment,
+        icon: const Icon(Icons.add_circle_outline),
+        label: const Text('音声・写真・動画を追加'),
       ),
     );
   }
