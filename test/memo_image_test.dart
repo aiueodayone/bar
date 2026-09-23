@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:memo_app/data/database_helper.dart';
 import 'package:memo_app/data/memo_image_repository.dart';
 import 'package:memo_app/data/memo_repository.dart';
 import 'package:memo_app/models/memo.dart';
@@ -12,14 +13,17 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  setUp(clearMemoDatabase);
+  // このテストファイル専用の DB ファイル(db_test_utils.dart 参照)。
+  final dbHelper = DatabaseHelper.forTesting('test_memo_image.db');
+
+  setUp(() => clearMemoDatabase(dbHelper));
 
   test(
     'images for a memo are returned ordered by sortOrder, and deleteImage '
     'removes just that one row',
     () async {
-      final memoRepository = MemoRepository();
-      final imageRepository = MemoImageRepository();
+      final memoRepository = MemoRepository(dbHelper: dbHelper);
+      final imageRepository = MemoImageRepository(dbHelper: dbHelper);
       final now = DateTime.now();
 
       await memoRepository.upsertMemo(
@@ -65,8 +69,8 @@ void main() {
   test(
     'deleting the memo row cascades to delete its memo_images rows too',
     () async {
-      final memoRepository = MemoRepository();
-      final imageRepository = MemoImageRepository();
+      final memoRepository = MemoRepository(dbHelper: dbHelper);
+      final imageRepository = MemoImageRepository(dbHelper: dbHelper);
       final now = DateTime.now();
 
       await memoRepository.upsertMemo(
@@ -105,8 +109,8 @@ void main() {
     'attachment type (image vs video) round-trips through insert/fetch, and '
     'defaults to image when not given',
     () async {
-      final memoRepository = MemoRepository();
-      final imageRepository = MemoImageRepository();
+      final memoRepository = MemoRepository(dbHelper: dbHelper);
+      final imageRepository = MemoImageRepository(dbHelper: dbHelper);
       final now = DateTime.now();
 
       await memoRepository.upsertMemo(

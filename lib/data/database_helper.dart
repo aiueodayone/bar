@@ -3,11 +3,26 @@ import 'package:sqflite/sqflite.dart';
 
 /// アプリ内で使用する SQLite データベースを管理するシングルトン。
 class DatabaseHelper {
-  DatabaseHelper._internal();
+  DatabaseHelper._internal(this._dbName);
 
-  static final DatabaseHelper instance = DatabaseHelper._internal();
+  static final DatabaseHelper instance = DatabaseHelper._internal(
+    'memo_app.db',
+  );
 
-  static const String _dbName = 'memo_app.db';
+  /// テスト専用: ファイル名を指定して別インスタンスを作る。
+  ///
+  /// sqflite_common_ffi はテスト実行のたびに使い捨てられるインメモリDBでは
+  /// なく、ディスク上の実ファイルを開く。`flutter test` はテストファイルを
+  /// 別プロセスとして並行実行するため、すべてのテストファイルが
+  /// [instance](= 'memo_app.db')を共有すると、DBを開く最初の一文
+  /// (PRAGMA user_version)の時点で別プロセスと衝突し、
+  /// SQLITE_BUSY("database is locked")で即座に失敗することがある
+  /// (busy_timeout は onConfigure の中で設定するため、接続を開く瞬間の
+  /// この最初の一文には間に合わない)。テストファイルごとに異なる
+  /// ファイル名を使うことで、そもそも競合させない。
+  DatabaseHelper.forTesting(String dbName) : this._internal(dbName);
+
+  final String _dbName;
   static const int _dbVersion = 4;
 
   Database? _db;

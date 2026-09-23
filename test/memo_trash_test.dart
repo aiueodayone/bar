@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:memo_app/data/database_helper.dart';
 import 'package:memo_app/data/memo_repository.dart';
 import 'package:memo_app/models/memo.dart';
 
@@ -10,11 +11,16 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  setUp(clearMemoDatabase);
+  // このテストファイル専用の DB ファイル。他のテストファイルと共有する
+  // .instance を使うと、flutter test の並行プロセス実行で SQLITE_BUSY
+  // ("database is locked")になることがある(db_test_utils.dart 参照)。
+  final dbHelper = DatabaseHelper.forTesting('test_memo_trash.db');
+
+  setUp(() => clearMemoDatabase(dbHelper));
 
   test('soft-deleted memos are hidden from fetchMemos, listed in '
       'fetchTrashedMemos, and reappear after restoreMemo', () async {
-    final repository = MemoRepository();
+    final repository = MemoRepository(dbHelper: dbHelper);
     final now = DateTime.now();
     final memo = Memo(
       id: 'trash-1',

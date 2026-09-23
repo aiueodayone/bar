@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:memo_app/data/database_helper.dart';
 import 'package:memo_app/data/genre_repository.dart';
 import 'package:memo_app/data/memo_image_repository.dart';
 import 'package:memo_app/data/memo_repository.dart';
@@ -32,12 +33,15 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
+  // このテストファイル専用の DB ファイル(db_test_utils.dart 参照)。
+  final dbHelper = DatabaseHelper.forTesting('test_backup_service.db');
+
   late Directory tempDir;
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('temoto_backup_test');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tempDir.path);
-    await clearMemoDatabase();
+    await clearMemoDatabase(dbHelper);
   });
 
   tearDown(() async {
@@ -49,8 +53,8 @@ void main() {
   test('createBackupBytes → restoreFromBackup round-trips genres and memos '
       'through the real AES-GCM encryption and a real (in-memory-ish) sqlite '
       'database, exactly like the on-device path does', () async {
-    final memoRepository = MemoRepository();
-    final genreRepository = GenreRepository();
+    final memoRepository = MemoRepository(dbHelper: dbHelper);
+    final genreRepository = GenreRepository(dbHelper: dbHelper);
 
     final genre = Genre(id: 'g1', name: '仕事', color: Colors.teal);
     await genreRepository.upsertGenre(genre, sortOrder: 0);
@@ -96,8 +100,8 @@ void main() {
 
   test('a memo with an audio recording round-trips through backup/restore '
       'with the same audio bytes intact', () async {
-    final memoRepository = MemoRepository();
-    final genreRepository = GenreRepository();
+    final memoRepository = MemoRepository(dbHelper: dbHelper);
+    final genreRepository = GenreRepository(dbHelper: dbHelper);
 
     // 元の録音ファイルは、復元先(voice_memos/)とは別の場所に置く。
     // そうしないと「たまたま同じパスのまま」で通ってしまい、実際に
@@ -145,9 +149,9 @@ void main() {
 
   test('a memo with attached images/video round-trips through backup/restore '
       'with the same bytes, order, and attachment type intact', () async {
-    final memoRepository = MemoRepository();
-    final genreRepository = GenreRepository();
-    final imageRepository = MemoImageRepository();
+    final memoRepository = MemoRepository(dbHelper: dbHelper);
+    final genreRepository = GenreRepository(dbHelper: dbHelper);
+    final imageRepository = MemoImageRepository(dbHelper: dbHelper);
 
     // 元の画像ファイルは、復元先(memo_images/)とは別の場所に置く。
     // 音声のテストと同じ理由で、実際にバイト列がコピーされたことを
