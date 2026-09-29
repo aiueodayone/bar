@@ -11,6 +11,7 @@ class MemoListItem extends StatelessWidget {
     required this.genre,
     required this.onTap,
     required this.onLongPress,
+    this.onToggleFavorite,
     this.selectionMode = false,
     this.selected = false,
   });
@@ -19,6 +20,9 @@ class MemoListItem extends StatelessWidget {
   final Genre? genre;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+
+  /// 選択モード中は星ボタン自体を出さないので、その間は null でよい。
+  final VoidCallback? onToggleFavorite;
 
   /// 一覧が複数選択モードのとき true。leading をチェックマークに切り替える。
   final bool selectionMode;
@@ -53,7 +57,22 @@ class MemoListItem extends StatelessWidget {
                 size: 20,
               ),
             ),
-      title: Text(displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              displayTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (memo.isFavorite && selectionMode)
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.star, color: Colors.amber, size: 18),
+            ),
+        ],
+      ),
       subtitle: Text(
         memo.title.isNotEmpty && preview.isNotEmpty
             ? preview
@@ -61,26 +80,40 @@ class MemoListItem extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            dateFormat.format(memo.updatedAt),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (genre != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                genre!.name,
-                style: TextStyle(
-                  color: genre!.color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+          if (!selectionMode)
+            IconButton(
+              icon: Icon(
+                memo.isFavorite ? Icons.star : Icons.star_border,
+                color: memo.isFavorite ? Colors.amber : Colors.grey,
               ),
+              tooltip: memo.isFavorite ? 'お気に入りを解除' : 'お気に入りに登録',
+              onPressed: onToggleFavorite,
             ),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                dateFormat.format(memo.updatedAt),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (genre != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    genre!.name,
+                    style: TextStyle(
+                      color: genre!.color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );

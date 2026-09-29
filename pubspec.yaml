@@ -107,6 +107,18 @@ dependency_overrides:
 flutter:
   uses-material-design: true
 
+  # Flutter が明示的な fontFamily 指定なしで描画すると、和文はOSのCJK
+  # フォールバックフォント頼みになり、機種によっては見慣れない・素朴な
+  # 印象の字形になりがちだった(「AIが作った感じの字体で気持ち悪い」との
+  # フィードバックあり)。Noto Sans JP(Adobe/Google、SIL Open Font
+  # License)をバンドルし、全画面で明示的に使う。可変フォント1ファイルで
+  # Regular〜Boldの太さを全部カバーできるため、複数ウェイトを別々に
+  # 同梱するより軽い。ライセンス全文は assets/fonts/NotoSansJP-OFL.txt。
+  fonts:
+    - family: NotoSansJP
+      fonts:
+        - asset: assets/fonts/NotoSansJP-Variable.ttf
+
 # assets/icon/*.png are source images for the two generators below only
 # (flutter_launcher_icons, flutter_native_splash read them straight off
 # disk at generation time) — deliberately not declared under flutter/assets,

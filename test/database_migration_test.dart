@@ -79,14 +79,14 @@ void main() {
     final db = await dbHelper.database;
 
     // 例外を投げずに開けたことに加え、期待する列が揃っているか確認する。
-    final memosColumns = (await db.rawQuery(
-      'PRAGMA table_info(memos)',
-    )).map((r) => r['name'] as String).toSet();
+    final memosColumns = (await db.rawQuery('PRAGMA table_info(memos)'))
+        .map((r) => r['name'] as String)
+        .toSet();
     expect(memosColumns, contains('deleted_at'));
 
-    final imagesColumns = (await db.rawQuery(
-      'PRAGMA table_info(memo_images)',
-    )).map((r) => r['name'] as String).toSet();
+    final imagesColumns = (await db.rawQuery('PRAGMA table_info(memo_images)'))
+        .map((r) => r['name'] as String)
+        .toSet();
     expect(imagesColumns, containsAll(['path', 'sort_order', 'type']));
 
     // 以前からあったメモが消えずに残っていること。
@@ -151,9 +151,9 @@ void main() {
     final dbHelper = DatabaseHelper.forTesting('test_migration_v2.db');
     final db = await dbHelper.database;
 
-    final imagesColumns = (await db.rawQuery(
-      'PRAGMA table_info(memo_images)',
-    )).map((r) => r['name'] as String).toSet();
+    final imagesColumns = (await db.rawQuery('PRAGMA table_info(memo_images)'))
+        .map((r) => r['name'] as String)
+        .toSet();
     expect(imagesColumns, containsAll(['path', 'sort_order', 'type']));
   });
 
@@ -231,5 +231,80 @@ void main() {
     // 既存行は type 列が無い状態から追加されたので、デフォルト値の
     // 'image' になっているはず。
     expect(rows.first['type'], 'image');
+  });
+
+  test('upgrading from version 4 (no is_favorite column) to version 5 '
+      'succeeds and defaults existing rows to not-favorite', () async {
+    final path = await pathFor('test_migration_v4.db');
+    await reset(path);
+
+    final oldDb = await databaseFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 4,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE genres (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              color INTEGER NOT NULL,
+              sort_order INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE memos (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              content TEXT NOT NULL,
+              genre_id TEXT,
+              audio_path TEXT,
+              audio_duration_ms INTEGER,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              deleted_at INTEGER,
+              FOREIGN KEY (genre_id) REFERENCES genres (id) ON DELETE SET NULL
+            )
+          ''');
+          // v4 時点の memo_images: is_favorite 列はまだ無い(memos 側)。
+          await db.execute('''
+            CREATE TABLE memo_images (
+              id TEXT PRIMARY KEY,
+              memo_id TEXT NOT NULL,
+              path TEXT NOT NULL,
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              created_at INTEGER NOT NULL,
+              type TEXT NOT NULL DEFAULT 'image',
+              FOREIGN KEY (memo_id) REFERENCES memos (id) ON DELETE CASCADE
+            )
+          ''');
+        },
+      ),
+    );
+    await oldDb.insert('memos', {
+      'id': 'memo-v4',
+      'title': 'v4のメモ',
+      'content': '',
+      'created_at': 1000,
+      'updated_at': 1000,
+    });
+    await oldDb.close();
+
+    final dbHelper = DatabaseHelper.forTesting('test_migration_v4.db');
+    final db = await dbHelper.database;
+
+    final memosColumns = (await db.rawQuery('PRAGMA table_info(memos)'))
+        .map((r) => r['name'] as String)
+        .toSet();
+    expect(memosColumns, contains('is_favorite'));
+
+    final rows = await db.query(
+      'memos',
+      where: 'id = ?',
+      whereArgs: ['memo-v4'],
+    );
+    expect(rows, hasLength(1));
+    // 既存行は is_favorite 列が無い状態から追加されたので、デフォルト値の
+    // 0(お気に入りでない)になっているはず。
+    expect(rows.first['is_favorite'], 0);
   });
 }

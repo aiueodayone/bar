@@ -12,9 +12,12 @@ class MemoRepository {
   final DatabaseHelper _dbHelper;
 
   /// ごみ箱に入っている(deleted_at が非NULLの)メモは含まない。
+  /// お気に入りは常に一覧の先頭にまとまる(updated_at DESC は
+  /// お気に入り内・お気に入りでない中それぞれでの並び順)。
   Future<List<Memo>> fetchMemos({
     String? genreId,
     String searchQuery = '',
+    bool favoritesOnly = false,
   }) async {
     final db = await _dbHelper.database;
     final where = <String>['deleted_at IS NULL'];
@@ -26,12 +29,15 @@ class MemoRepository {
       where.add('genre_id = ?');
       args.add(genreId);
     }
+    if (favoritesOnly) {
+      where.add('is_favorite = 1');
+    }
 
     final rows = await db.query(
       'memos',
       where: where.join(' AND '),
       whereArgs: args.isEmpty ? null : args,
-      orderBy: 'updated_at DESC',
+      orderBy: 'is_favorite DESC, updated_at DESC',
     );
     var memos = rows.map(Memo.fromMap).toList();
 
@@ -99,6 +105,17 @@ class MemoRepository {
     if (updated == 0) {
       await db.insert('memos', memo.toMap());
     }
+  }
+
+  /// お気に入りの ON/OFF だけを更新する(他の列には触れない)。
+  Future<void> setFavorite(String id, bool isFavorite) async {
+    final db = await _dbHelper.database;
+    await db.update(
+      'memos',
+      {'is_favorite': isFavorite ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   /// ごみ箱に移動する(deleted_at をセットするだけで、行は残す)。

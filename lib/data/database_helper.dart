@@ -23,7 +23,7 @@ class DatabaseHelper {
   DatabaseHelper.forTesting(String dbName) : this._internal(dbName);
 
   final String _dbName;
-  static const int _dbVersion = 4;
+  static const int _dbVersion = 5;
 
   Database? _db;
 
@@ -78,6 +78,7 @@ class DatabaseHelper {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             deleted_at INTEGER,
+            is_favorite INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (genre_id) REFERENCES genres (id) ON DELETE SET NULL
           )
         ''');
@@ -133,6 +134,13 @@ class DatabaseHelper {
         if (oldVersion < 4) {
           await db.execute(
             "ALTER TABLE memo_images ADD COLUMN type TEXT NOT NULL DEFAULT 'image'",
+          );
+        }
+        // お気に入り機能のために is_favorite 列を追加する。
+        // 既存行はすべて未登録なので、デフォルト値 0 がそのまま正しい。
+        if (oldVersion < 5) {
+          await db.execute(
+            'ALTER TABLE memos ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0',
           );
         }
       },

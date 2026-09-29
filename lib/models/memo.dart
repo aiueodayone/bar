@@ -10,6 +10,7 @@ class Memo {
     this.audioPath,
     this.audioDurationMs,
     this.deletedAt,
+    this.isFavorite = false,
   });
 
   factory Memo.fromMap(Map<String, Object?> map) {
@@ -25,6 +26,7 @@ class Memo {
       deletedAt: map['deleted_at'] == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(map['deleted_at']! as int),
+      isFavorite: (map['is_favorite'] as int? ?? 0) != 0,
     );
   }
 
@@ -40,6 +42,8 @@ class Memo {
   /// null でなければ「ごみ箱」に入っている(その時刻に削除された)。
   final DateTime? deletedAt;
 
+  final bool isFavorite;
+
   bool get hasAudio => audioPath != null && audioPath!.isNotEmpty;
   bool get isDeleted => deletedAt != null;
 
@@ -54,6 +58,7 @@ class Memo {
       'created_at': createdAt.millisecondsSinceEpoch,
       'updated_at': updatedAt.millisecondsSinceEpoch,
       'deleted_at': deletedAt?.millisecondsSinceEpoch,
+      'is_favorite': isFavorite ? 1 : 0,
     };
   }
 
@@ -68,6 +73,7 @@ class Memo {
     DateTime? updatedAt,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
+    bool? isFavorite,
   }) {
     return Memo(
       id: id,
@@ -81,6 +87,7 @@ class Memo {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+      isFavorite: isFavorite ?? this.isFavorite,
     );
   }
 }

@@ -117,6 +117,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 IconButton(
+                  icon: Icon(
+                    memoProvider.favoritesOnly ? Icons.star : Icons.star_border,
+                    color: memoProvider.favoritesOnly ? Colors.amber : null,
+                  ),
+                  tooltip: memoProvider.favoritesOnly
+                      ? 'すべてのメモを表示'
+                      : 'お気に入りのみ表示',
+                  onPressed: () => memoProvider.setFavoritesOnly(
+                    !memoProvider.favoritesOnly,
+                  ),
+                ),
+                IconButton(
                   icon: const Icon(Icons.settings_outlined),
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen()),
@@ -140,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: memoProvider.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : memoProvider.memos.isEmpty
-                ? const _EmptyState()
+                ? _EmptyState(favoritesOnly: memoProvider.favoritesOnly)
                 : ListView.separated(
                     itemCount: memoProvider.memos.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
@@ -151,6 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         genre: genreProvider.byId(memo.genreId),
                         selectionMode: _isSelecting,
                         selected: _selectedIds.contains(memo.id),
+                        onToggleFavorite: () =>
+                            memoProvider.toggleFavorite(memo),
                         onTap: () {
                           if (_isSelecting) {
                             _toggleSelection(memo.id);
@@ -188,7 +202,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  const _EmptyState({required this.favoritesOnly});
+
+  final bool favoritesOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -198,10 +214,16 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.notes, size: 64, color: Colors.grey.shade400),
+            Icon(
+              favoritesOnly ? Icons.star_border : Icons.notes,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
             const SizedBox(height: 12),
             Text(
-              'メモがありません\n右下の + からテキストや音声メモを作成できます',
+              favoritesOnly
+                  ? 'お気に入りのメモがありません\n一覧の星マークをタップすると登録できます'
+                  : 'メモがありません\n右下の + からテキストや音声メモを作成できます',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600),
             ),

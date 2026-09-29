@@ -271,6 +271,7 @@ class BackupService {
             'images': imagesByMemoId[memo.id] ?? const [],
             'createdAt': memo.createdAt.millisecondsSinceEpoch,
             'updatedAt': memo.updatedAt.millisecondsSinceEpoch,
+            'isFavorite': memo.isFavorite,
           },
       ],
     };
@@ -377,6 +378,9 @@ class BackupService {
         updatedAt: DateTime.fromMillisecondsSinceEpoch(
           memoMap['updatedAt'] as int,
         ),
+        // お気に入り機能を追加する前のバックアップには無い項目なので、
+        // 無ければ false 扱いにする。
+        isFavorite: memoMap['isFavorite'] as bool? ?? false,
       );
       await _memoRepository.upsertMemo(memo);
 

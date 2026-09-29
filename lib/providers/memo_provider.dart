@@ -14,9 +14,11 @@ const Duration kTrashRetention = Duration(days: 5);
 
 /// メモ一覧・検索・ジャンル絞り込み・ごみ箱の状態を管理する。
 class MemoProvider extends ChangeNotifier {
-  MemoProvider({MemoRepository? repository, MemoImageRepository? imageRepository})
-    : _repository = repository ?? MemoRepository(),
-      _imageRepository = imageRepository ?? MemoImageRepository();
+  MemoProvider({
+    MemoRepository? repository,
+    MemoImageRepository? imageRepository,
+  }) : _repository = repository ?? MemoRepository(),
+       _imageRepository = imageRepository ?? MemoImageRepository();
 
   final MemoRepository _repository;
   final MemoImageRepository _imageRepository;
@@ -30,6 +32,9 @@ class MemoProvider extends ChangeNotifier {
 
   String? _genreFilter;
   String? get genreFilter => _genreFilter;
+
+  bool _favoritesOnly = false;
+  bool get favoritesOnly => _favoritesOnly;
 
   String _searchQuery = '';
   String get searchQuery => _searchQuery;
@@ -45,6 +50,7 @@ class MemoProvider extends ChangeNotifier {
     _memos = await _repository.fetchMemos(
       genreId: _genreFilter,
       searchQuery: _searchQuery,
+      favoritesOnly: _favoritesOnly,
     );
     _isLoading = false;
     notifyListeners();
@@ -58,6 +64,17 @@ class MemoProvider extends ChangeNotifier {
   void setGenreFilter(String? genreId) {
     _genreFilter = genreId;
     load();
+  }
+
+  void setFavoritesOnly(bool favoritesOnly) {
+    _favoritesOnly = favoritesOnly;
+    load();
+  }
+
+  /// お気に入りの ON/OFF を切り替える。
+  Future<void> toggleFavorite(Memo memo) async {
+    await _repository.setFavorite(memo.id, !memo.isFavorite);
+    await load();
   }
 
   void setSearchQuery(String query) {

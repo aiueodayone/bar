@@ -55,6 +55,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   // 追加されなかった」場合の後始末に使う。
   bool _createdMemoRow = false;
   String? _selectedGenreId;
+  bool _isFavorite = false;
 
   String? _audioPath;
   int? _audioDurationMs;
@@ -107,6 +108,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         _audioPath = memo.audioPath;
         _audioDurationMs = memo.audioDurationMs;
         _initialAudioPath = memo.audioPath;
+        _isFavorite = memo.isFavorite;
         final images = await _imageRepository.fetchImagesForMemo(memo.id);
         _images = List.of(images);
         _initialImages = List.of(images);
@@ -324,6 +326,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       audioPath: _audioPath,
       audioDurationMs: _audioDurationMs,
       clearAudio: _audioPath == null,
+      isFavorite: _isFavorite,
     );
 
     try {
@@ -533,6 +536,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
       audioPath: _audioPath,
       audioDurationMs: _audioDurationMs,
       clearAudio: _audioPath == null,
+      isFavorite: _isFavorite,
     );
     try {
       await context.read<MemoProvider>().saveMemo(memo);
@@ -723,6 +727,12 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
     }
   }
 
+  /// ジャンル選択などと同様、ここでは画面の状態を切り替えるだけで、
+  /// 実際のDB反映は _save()(戻る操作でも自動的に呼ばれる)側で行う。
+  void _toggleFavorite() {
+    setState(() => _isFavorite = !_isFavorite);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -745,6 +755,12 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         appBar: AppBar(
           title: Text(widget.memoId == null ? '新規メモ' : 'メモを編集'),
           actions: [
+            IconButton(
+              icon: Icon(_isFavorite ? Icons.star : Icons.star_border),
+              color: _isFavorite ? Colors.amber : null,
+              tooltip: _isFavorite ? 'お気に入りを解除' : 'お気に入りに登録',
+              onPressed: _toggleFavorite,
+            ),
             IconButton(
               icon: const Icon(Icons.ios_share),
               tooltip: '共有',
