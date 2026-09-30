@@ -16,6 +16,15 @@ class ExportService {
   /// テキスト・音声・添付画像/動画のうち、選択された組み合わせをまとめて
   /// 共有する(OS標準の共有シートを開く)。呼び出し側(メモ編集画面)で
   /// どれを含めるか選ばせてから呼ぶ。
+  ///
+  /// テキストとファイル(音声・画像・動画)を両方選んだ場合、共有操作を
+  /// 2回に分けて行う: LINEなど一部のアプリは、画像と一緒に渡された
+  /// テキスト(Android の EXTRA_TEXT)を送信時に無視してしまい、
+  /// 「写真とメモを両方選んだのに写真しか届かない」という結果になる
+  /// (share_plus 側は EXTRA_TEXT を正しく渡しており、受け取ったアプリが
+  /// 使わないだけ)。1回にまとめず、まずテキストだけ共有し、利用者が
+  /// 共有シートを閉じた後に続けてファイルだけ共有すれば、それぞれ
+  /// 独立したメッセージとして確実に届く。
   Future<void> shareMemo({
     required Memo memo,
     Genre? genre,
@@ -29,11 +38,23 @@ class ExportService {
     ];
     if (!includeText && files.isEmpty) return;
 
+    final subject = memo.title.isEmpty ? 'メモ' : memo.title;
+
+    if (includeText && files.isNotEmpty) {
+      await SharePlus.instance.share(
+        ShareParams(text: _buildMemoText(memo, genre), subject: subject),
+      );
+      await SharePlus.instance.share(
+        ShareParams(files: files, subject: subject),
+      );
+      return;
+    }
+
     await SharePlus.instance.share(
       ShareParams(
         text: includeText ? _buildMemoText(memo, genre) : null,
         files: files.isEmpty ? null : files,
-        subject: memo.title.isEmpty ? 'メモ' : memo.title,
+        subject: subject,
       ),
     );
   }
