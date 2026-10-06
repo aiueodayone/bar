@@ -11,6 +11,8 @@ class Memo {
     this.audioDurationMs,
     this.deletedAt,
     this.isFavorite = false,
+    this.hasImage = false,
+    this.hasVideo = false,
   });
 
   factory Memo.fromMap(Map<String, Object?> map) {
@@ -44,6 +46,13 @@ class Memo {
 
   final bool isFavorite;
 
+  /// メモ一覧(MemoListItem)で添付の種類を示すアイコンを出すためだけの
+  /// 派生情報。memo_images テーブルは別テーブルなので memos のDB列には
+  /// 対応せず、[toMap]/[fromMap] のやり取りには含まれない。
+  /// [MemoRepository.fetchMemos] が一覧取得時にまとめて別クエリで埋める。
+  final bool hasImage;
+  final bool hasVideo;
+
   bool get hasAudio => audioPath != null && audioPath!.isNotEmpty;
   bool get isDeleted => deletedAt != null;
 
@@ -74,6 +83,8 @@ class Memo {
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     bool? isFavorite,
+    bool? hasImage,
+    bool? hasVideo,
   }) {
     return Memo(
       id: id,
@@ -88,6 +99,8 @@ class Memo {
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       isFavorite: isFavorite ?? this.isFavorite,
+      hasImage: hasImage ?? this.hasImage,
+      hasVideo: hasVideo ?? this.hasVideo,
     );
   }
 }

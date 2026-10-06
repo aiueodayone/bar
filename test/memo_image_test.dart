@@ -18,53 +18,48 @@ void main() {
 
   setUp(() => clearMemoDatabase(dbHelper));
 
-  test(
-    'images for a memo are returned ordered by sortOrder, and deleteImage '
-    'removes just that one row',
-    () async {
-      final memoRepository = MemoRepository(dbHelper: dbHelper);
-      final imageRepository = MemoImageRepository(dbHelper: dbHelper);
-      final now = DateTime.now();
+  test('images for a memo are returned ordered by sortOrder, and deleteImage '
+      'removes just that one row', () async {
+    final memoRepository = MemoRepository(dbHelper: dbHelper);
+    final imageRepository = MemoImageRepository(dbHelper: dbHelper);
+    final now = DateTime.now();
 
-      await memoRepository.upsertMemo(
-        Memo(
-          id: 'img-memo-1',
-          title: '画像テスト',
-          content: '',
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'img-memo-1',
+        title: '画像テスト',
+        content: '',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
 
-      await imageRepository.insertImage(
-        MemoImage(
-          id: 'img-2',
-          memoId: 'img-memo-1',
-          path: '/tmp/two.jpg',
-          sortOrder: 1,
-          createdAt: now,
-        ),
-      );
-      await imageRepository.insertImage(
-        MemoImage(
-          id: 'img-1',
-          memoId: 'img-memo-1',
-          path: '/tmp/one.jpg',
-          sortOrder: 0,
-          createdAt: now,
-        ),
-      );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'img-2',
+        memoId: 'img-memo-1',
+        path: '/tmp/two.jpg',
+        sortOrder: 1,
+        createdAt: now,
+      ),
+    );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'img-1',
+        memoId: 'img-memo-1',
+        path: '/tmp/one.jpg',
+        sortOrder: 0,
+        createdAt: now,
+      ),
+    );
 
-      final images = await imageRepository.fetchImagesForMemo('img-memo-1');
-      expect(images.map((i) => i.id).toList(), ['img-1', 'img-2']);
+    final images = await imageRepository.fetchImagesForMemo('img-memo-1');
+    expect(images.map((i) => i.id).toList(), ['img-1', 'img-2']);
 
-      await imageRepository.deleteImage('img-1');
-      final afterDelete = await imageRepository.fetchImagesForMemo(
-        'img-memo-1',
-      );
-      expect(afterDelete.map((i) => i.id).toList(), ['img-2']);
-    },
-  );
+    await imageRepository.deleteImage('img-1');
+    final afterDelete = await imageRepository.fetchImagesForMemo('img-memo-1');
+    expect(afterDelete.map((i) => i.id).toList(), ['img-2']);
+  });
 
   test(
     'deleting the memo row cascades to delete its memo_images rows too',
@@ -105,110 +100,177 @@ void main() {
     },
   );
 
-  test(
-    'attachment type (image vs video) round-trips through insert/fetch, and '
-    'defaults to image when not given',
-    () async {
-      final memoRepository = MemoRepository(dbHelper: dbHelper);
-      final imageRepository = MemoImageRepository(dbHelper: dbHelper);
-      final now = DateTime.now();
+  test('attachment type (image vs video) round-trips through insert/fetch, and '
+      'defaults to image when not given', () async {
+    final memoRepository = MemoRepository(dbHelper: dbHelper);
+    final imageRepository = MemoImageRepository(dbHelper: dbHelper);
+    final now = DateTime.now();
 
-      await memoRepository.upsertMemo(
-        Memo(
-          id: 'img-memo-3',
-          title: 'タイプテスト',
-          content: '',
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
-      await imageRepository.insertImage(
-        MemoImage(
-          id: 'img-4',
-          memoId: 'img-memo-3',
-          path: '/tmp/four.jpg',
-          sortOrder: 0,
-          createdAt: now,
-        ),
-      );
-      await imageRepository.insertImage(
-        MemoImage(
-          id: 'img-5',
-          memoId: 'img-memo-3',
-          path: '/tmp/five.mp4',
-          sortOrder: 1,
-          createdAt: now,
-          type: MemoAttachmentType.video,
-        ),
-      );
-
-      final images = await imageRepository.fetchImagesForMemo('img-memo-3');
-      expect(images[0].type, MemoAttachmentType.image);
-      expect(images[0].isVideo, isFalse);
-      expect(images[1].type, MemoAttachmentType.video);
-      expect(images[1].isVideo, isTrue);
-    },
-  );
-
-  test(
-    're-saving an existing memo (as the edit screen does before opening the '
-    'camera/gallery for each attachment, and again on final save) must not '
-    'wipe its already-attached images/videos',
-    () async {
-      final memoRepository = MemoRepository(dbHelper: dbHelper);
-      final imageRepository = MemoImageRepository(dbHelper: dbHelper);
-      final now = DateTime.now();
-
-      final memo = Memo(
-        id: 'img-memo-4',
-        title: '',
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'img-memo-3',
+        title: 'タイプテスト',
         content: '',
         createdAt: now,
         updatedAt: now,
-      );
-      await memoRepository.upsertMemo(memo);
+      ),
+    );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'img-4',
+        memoId: 'img-memo-3',
+        path: '/tmp/four.jpg',
+        sortOrder: 0,
+        createdAt: now,
+      ),
+    );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'img-5',
+        memoId: 'img-memo-3',
+        path: '/tmp/five.mp4',
+        sortOrder: 1,
+        createdAt: now,
+        type: MemoAttachmentType.video,
+      ),
+    );
 
-      // 1枚目(写真)を撮った直後、すぐDBに追加(eager insert)。
-      await imageRepository.insertImage(
-        MemoImage(
-          id: 'img-6',
-          memoId: 'img-memo-4',
-          path: '/tmp/six.jpg',
-          sortOrder: 0,
-          createdAt: now,
-        ),
-      );
+    final images = await imageRepository.fetchImagesForMemo('img-memo-3');
+    expect(images[0].type, MemoAttachmentType.image);
+    expect(images[0].isVideo, isFalse);
+    expect(images[1].type, MemoAttachmentType.video);
+    expect(images[1].isVideo, isTrue);
+  });
 
-      // 2つ目(動画)を追加しようとカメラ/ギャラリーを開く前に、
-      // 編集画面は毎回 _autosaveBeforeLeavingApp() でメモ行を再保存する。
-      // これが memo_images の行を巻き込んで消してしまわないこと。
-      await memoRepository.upsertMemo(memo.copyWith(title: '下書き'));
+  test('re-saving an existing memo (as the edit screen does before opening the '
+      'camera/gallery for each attachment, and again on final save) must not '
+      'wipe its already-attached images/videos', () async {
+    final memoRepository = MemoRepository(dbHelper: dbHelper);
+    final imageRepository = MemoImageRepository(dbHelper: dbHelper);
+    final now = DateTime.now();
 
-      expect(
-        (await imageRepository.fetchImagesForMemo('img-memo-4'))
-            .map((i) => i.id),
-        ['img-6'],
-      );
+    final memo = Memo(
+      id: 'img-memo-4',
+      title: '',
+      content: '',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await memoRepository.upsertMemo(memo);
 
-      // 2枚目(動画)が追加された後、insertImage 直後。
-      await imageRepository.insertImage(
-        MemoImage(
-          id: 'img-7',
-          memoId: 'img-memo-4',
-          path: '/tmp/seven.mp4',
-          sortOrder: 1,
-          createdAt: now,
-          type: MemoAttachmentType.video,
-        ),
-      );
+    // 1枚目(写真)を撮った直後、すぐDBに追加(eager insert)。
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'img-6',
+        memoId: 'img-memo-4',
+        path: '/tmp/six.jpg',
+        sortOrder: 0,
+        createdAt: now,
+      ),
+    );
 
-      // 最終保存(_save() 側)でもう一度 upsertMemo が呼ばれる。
-      await memoRepository.upsertMemo(memo.copyWith(title: '完成版'));
+    // 2つ目(動画)を追加しようとカメラ/ギャラリーを開く前に、
+    // 編集画面は毎回 _autosaveBeforeLeavingApp() でメモ行を再保存する。
+    // これが memo_images の行を巻き込んで消してしまわないこと。
+    await memoRepository.upsertMemo(memo.copyWith(title: '下書き'));
 
-      final finalImages = await imageRepository.fetchImagesForMemo(
-        'img-memo-4',
-      );
-      expect(finalImages.map((i) => i.id).toList(), ['img-6', 'img-7']);
-    },
-  );
+    expect(
+      (await imageRepository.fetchImagesForMemo('img-memo-4')).map((i) => i.id),
+      ['img-6'],
+    );
+
+    // 2枚目(動画)が追加された後、insertImage 直後。
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'img-7',
+        memoId: 'img-memo-4',
+        path: '/tmp/seven.mp4',
+        sortOrder: 1,
+        createdAt: now,
+        type: MemoAttachmentType.video,
+      ),
+    );
+
+    // 最終保存(_save() 側)でもう一度 upsertMemo が呼ばれる。
+    await memoRepository.upsertMemo(memo.copyWith(title: '完成版'));
+
+    final finalImages = await imageRepository.fetchImagesForMemo('img-memo-4');
+    expect(finalImages.map((i) => i.id).toList(), ['img-6', 'img-7']);
+  });
+
+  test('fetchMemos() sets hasImage/hasVideo based on what is actually attached '
+      '(for the list screen\'s attachment-type icons), without an N+1 query '
+      'per memo', () async {
+    final memoRepository = MemoRepository(dbHelper: dbHelper);
+    final imageRepository = MemoImageRepository(dbHelper: dbHelper);
+    final now = DateTime.now();
+
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'flags-none',
+        title: '添付なし',
+        content: '',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'flags-image-only',
+        title: '写真のみ',
+        content: '',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'flags-img-1',
+        memoId: 'flags-image-only',
+        path: '/tmp/flags-photo.jpg',
+        sortOrder: 0,
+        createdAt: now,
+      ),
+    );
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'flags-both',
+        title: '写真と動画',
+        content: '',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'flags-img-2',
+        memoId: 'flags-both',
+        path: '/tmp/flags-photo2.jpg',
+        sortOrder: 0,
+        createdAt: now,
+      ),
+    );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'flags-vid-1',
+        memoId: 'flags-both',
+        path: '/tmp/flags-video.mp4',
+        sortOrder: 1,
+        createdAt: now,
+        type: MemoAttachmentType.video,
+      ),
+    );
+
+    final memos = await memoRepository.fetchMemos();
+    final byId = {for (final m in memos) m.id: m};
+
+    expect(byId['flags-none']!.hasImage, isFalse);
+    expect(byId['flags-none']!.hasVideo, isFalse);
+
+    expect(byId['flags-image-only']!.hasImage, isTrue);
+    expect(byId['flags-image-only']!.hasVideo, isFalse);
+
+    expect(byId['flags-both']!.hasImage, isTrue);
+    expect(byId['flags-both']!.hasVideo, isTrue);
+  });
 }

@@ -36,6 +36,15 @@ class MemoListItem extends StatelessWidget {
         ? memo.title
         : (preview.isNotEmpty ? preview : '(無題のメモ)');
 
+    // 音声には昔からマイクアイコンがあったが、写真・動画には何も表示が
+    // 無く「添付の有無が一覧から分からない」というフィードバックが
+    // あった。複数種類が付いている場合は該当するアイコンを並べて出す。
+    final attachmentIcons = <IconData>[
+      if (memo.hasAudio) Icons.mic,
+      if (memo.hasImage) Icons.photo_outlined,
+      if (memo.hasVideo) Icons.videocam_outlined,
+    ];
+
     return ListTile(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -96,6 +105,24 @@ class MemoListItem extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              if (attachmentIcons.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final icon in attachmentIcons)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 3),
+                          child: Icon(
+                            icon,
+                            size: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               Text(
                 dateFormat.format(memo.updatedAt),
                 style: Theme.of(context).textTheme.bodySmall,

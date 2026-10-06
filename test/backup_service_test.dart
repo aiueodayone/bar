@@ -17,15 +17,20 @@ import 'package:memo_app/services/backup_service.dart';
 
 import 'support/db_test_utils.dart';
 
-/// テスト中だけ getApplicationDocumentsDirectory() を一時ディレクトリに
-/// 差し替える。実機・エミュレータなしで path_provider のプラットフォーム
-/// チャンネルを叩かせないようにするため。
+/// テスト中だけ getApplicationDocumentsDirectory()/getTemporaryDirectory() を
+/// 一時ディレクトリに差し替える。実機・エミュレータなしで path_provider の
+/// プラットフォームチャンネルを叩かせないようにするため。
+/// (バックアップ作成・復元のステージング用一時ファイルは
+/// getTemporaryDirectory() を使うようになったので、こちらも実装が必要。)
 class _FakePathProviderPlatform extends PathProviderPlatform {
   _FakePathProviderPlatform(this.path);
   final String path;
 
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
+
+  @override
+  Future<String?> getTemporaryPath() async => path;
 }
 
 void main() {
@@ -210,9 +215,7 @@ void main() {
 
     await service.restoreFromBackup(bytes);
 
-    final restoredImages = await imageRepository.fetchImagesForMemo(
-      'm-images',
-    );
+    final restoredImages = await imageRepository.fetchImagesForMemo('m-images');
     expect(restoredImages, hasLength(2));
     expect(restoredImages[0].sortOrder, 0);
     expect(restoredImages[1].sortOrder, 1);

@@ -91,23 +91,38 @@ const List<int> _backupEncryptionKeyBytes = [
 const List<int> _encryptedBackupMagic = [0x54, 0x4D, 0x45, 0x42];
 const int _encryptionFormatVersion = 1;
 
-/// [compute] に渡す ZIP 内の1エントリ(パスとバイト列)。
-class _ZipEntryData {
-  const _ZipEntryData(this.path, this.bytes);
-  final String path;
-  final Uint8List bytes;
+/// [compute] に渡す ZIP 内の1エントリ(元ファイルのパスと、ZIP内でのパス)。
+/// 以前はここでファイルのバイト列そのものを保持していたが、添付が多い
+/// (特に動画)と、全ファイル分のバイト列をメインisolateで読み込んで
+/// 保持 → isolateをまたいでコピー → さらにZIP全体をメモリ上に
+/// エンコード、という3重のメモリコピーが発生し、蓄積データが多いほど
+/// メモリを圧迫する作りになっていた。パスだけを渡し、実際のファイル
+/// 読み込みはisolate内で [ZipFileEncoder] に1ファイルずつストリーミング
+/// させることで、どの時点でも「今処理中の1ファイル分」程度のメモリしか
+/// 使わないようにする。
+class _ZipPathEntry {
+  const _ZipPathEntry(this.sourcePath, this.zipPath);
+  final String sourcePath;
+  final String zipPath;
 }
 
 class _CreateZipArgs {
-  const _CreateZipArgs(this.entries, this.jsonBytes);
-  final List<_ZipEntryData> entries;
+  const _CreateZipArgs(this.entries, this.jsonBytes, this.outputZipPath);
+  final List<_ZipPathEntry> entries;
   final Uint8List jsonBytes;
+
+  /// ZIPを一旦書き出す一時ファイルのパス(メインisolateで
+  /// getTemporaryDirectory() を使って解決したものを渡す。path_provider の
+  /// プラットフォームチャンネル呼び出しはバックグラウンドisolateからは
+  /// 使えないため)。
+  final String outputZipPath;
 }
 
-/// [compute] 用トップレベル関数: ZIP圧縮とAES-GCM暗号化はいずれも
-/// バックアップ対象のファイルサイズに比例して重くなる処理で、動画添付を
-/// 含むバックアップではメインisolate(=UIスレッド)上で実行すると体感できる
-/// フリーズを起こしうる。まとめてバックグラウンドisolateで行う。
+/// [compute] 用トップレベル関数: ZIP圧縮(今はストリーミングで実質
+/// 無圧縮)とAES-GCM暗号化はいずれもバックアップ対象のファイルサイズに
+/// 比例して重くなる処理で、動画添付を含むバックアップではメインisolate
+/// (=UIスレッド)上で実行すると体感できるフリーズを起こしうる。まとめて
+/// バックグラウンドisolateで行う。
 ///
 /// トップレベル関数(またはstaticメソッド)である必要がある: compute() は
 /// 関数そのものを別isolateに渡して実行するため、クロージャやインスタンス
@@ -115,17 +130,31 @@ class _CreateZipArgs {
 /// 同じプログラムが読み込まれた新しいisolateでもそのまま参照できるため、
 /// 引数として渡す必要はない。
 Future<Uint8List> _buildEncryptedBackupZip(_CreateZipArgs args) async {
-  final archive = Archive();
-  for (final entry in args.entries) {
-    archive.addFile(ArchiveFile(entry.path, entry.bytes.length, entry.bytes));
+  final encoder = ZipFileEncoder();
+  encoder.create(args.outputZipPath);
+  try {
+    for (final entry in args.entries) {
+      final file = File(entry.sourcePath);
+      if (!await file.exists()) continue;
+      // 写真・動画・音声はすでに圧縮済み形式なので、ZIP側でさらに
+      // 圧縮(DEFLATE)をかけてもファイルサイズはほとんど縮まらず、
+      // CPU時間だけ余分にかかる。STORE(無圧縮)で素通しする。
+      await encoder.addFile(file, entry.zipPath, ZipFileEncoder.STORE);
+    }
+    encoder.addArchiveFile(
+      ArchiveFile('backup.json', args.jsonBytes.length, args.jsonBytes),
+    );
+  } finally {
+    await encoder.close();
   }
-  archive.addFile(
-    ArchiveFile('backup.json', args.jsonBytes.length, args.jsonBytes),
-  );
 
-  final zipBytes = ZipEncoder().encode(archive);
-  if (zipBytes == null) {
-    throw StateError('バックアップの作成に失敗しました');
+  final zipFile = File(args.outputZipPath);
+  final zipBytes = await zipFile.readAsBytes();
+  try {
+    await zipFile.delete();
+  } catch (_) {
+    // 一時ファイルの削除失敗は致命的ではない(OSのキャッシュ領域なので
+    // いずれ回収される)。バックアップ作成自体は続行する。
   }
 
   final secretKey = SecretKey(_backupEncryptionKeyBytes);
@@ -166,19 +195,52 @@ Future<Uint8List> _decryptCipherText(_DecryptArgs args) async {
   return Uint8List.fromList(plainBytes);
 }
 
+class _ExtractArgs {
+  const _ExtractArgs(this.zipBytes, this.stagingDirPath);
+  final Uint8List zipBytes;
+  final String stagingDirPath;
+}
+
+class _ExtractResult {
+  const _ExtractResult(this.jsonBytes, this.extractedPaths);
+
+  /// backup.json の中身。見つからなければ null(バックアップとして
+  /// 不正なファイル)。
+  final Uint8List? jsonBytes;
+
+  /// ZIP内パス(例: 'images/xxx.jpg')→ 一時展開先の実ファイルパス。
+  final Map<String, String> extractedPaths;
+}
+
 /// [compute] 用トップレベル関数: ZIP展開(解凍)も元ファイルサイズに比例して
-/// 重い処理なので、バックグラウンドisolateで行う。[Archive]/[ArchiveFile]
-/// オブジェクトそのものではなく、中身(パス→バイト列)だけを取り出して
-/// 返す(isolateをまたいで受け渡すデータの形を単純に保つため)。
-Map<String, Uint8List> _decodeZipEntries(Uint8List zipBytes) {
-  final archive = ZipDecoder().decodeBytes(zipBytes);
-  final result = <String, Uint8List>{};
+/// 重い処理なので、バックグラウンドisolateで行う。
+///
+/// 以前は展開した全ファイルの中身を `Map<String, Uint8List>` としてまとめて
+/// メインisolateに返していたが、これだと「添付ファイル全部ぶんのバイト列を
+/// 一度に保持する」状態になり、蓄積データが多いバックアップほどメモリを
+/// 圧迫する。1ファイルずつ一時ディレクトリに書き出すことで、どの時点でも
+/// 「今処理中の1ファイル分」程度のメモリしか使わないようにする。
+/// メインisolate側は、このステージング先から実際の保存先へ
+/// File.rename()(同一ファイルシステム上ならOSレベルの移動で、Dartの
+/// メモリを経由しない)するだけでよい。
+Future<_ExtractResult> _extractBackupZip(_ExtractArgs args) async {
+  final archive = ZipDecoder().decodeBytes(args.zipBytes);
+  Uint8List? jsonBytes;
+  final extracted = <String, String>{};
+
   for (final file in archive.files) {
-    if (file.isFile) {
-      result[file.name] = Uint8List.fromList(file.content as List<int>);
+    if (!file.isFile) continue;
+    if (file.name == 'backup.json') {
+      jsonBytes = Uint8List.fromList(file.content as List<int>);
+      continue;
     }
+    final outFile = File(p.join(args.stagingDirPath, file.name));
+    await outFile.parent.create(recursive: true);
+    await outFile.writeAsBytes(file.content as List<int>);
+    extracted[file.name] = outFile.path;
   }
-  return result;
+
+  return _ExtractResult(jsonBytes, extracted);
 }
 
 /// メモ・ジャンル・録音データをまとめてバックアップ/復元するサービス。
@@ -217,7 +279,7 @@ class BackupService {
     final genres = await _genreRepository.fetchGenres();
     final memos = await _memoRepository.fetchMemos();
 
-    final zipEntries = <_ZipEntryData>[];
+    final zipEntries = <_ZipPathEntry>[];
     final audioFileByMemoId = <String, String>{};
     final imagesByMemoId = <String, List<Map<String, Object?>>>{};
 
@@ -226,8 +288,7 @@ class BackupService {
       final file = File(memo.audioPath!);
       if (!await file.exists()) continue;
       final zipPath = 'audio/${p.basename(memo.audioPath!)}';
-      final bytes = await file.readAsBytes();
-      zipEntries.add(_ZipEntryData(zipPath, bytes));
+      zipEntries.add(_ZipPathEntry(memo.audioPath!, zipPath));
       audioFileByMemoId[memo.id] = zipPath;
     }
 
@@ -239,8 +300,7 @@ class BackupService {
         final file = File(image.path);
         if (!await file.exists()) continue;
         final zipPath = 'images/${image.id}${p.extension(image.path)}';
-        final bytes = await file.readAsBytes();
-        zipEntries.add(_ZipEntryData(zipPath, bytes));
+        zipEntries.add(_ZipPathEntry(image.path, zipPath));
         entries.add({
           'file': zipPath,
           'sortOrder': image.sortOrder,
@@ -278,11 +338,19 @@ class BackupService {
 
     final jsonBytes = utf8.encode(jsonEncode(data));
 
+    // getTemporaryDirectory() は path_provider のプラットフォームチャンネル
+    // 呼び出しなのでメインisolateで解決し、パス文字列だけをisolateに渡す。
+    final tmpDir = await getTemporaryDirectory();
+    final tmpZipPath = p.join(
+      tmpDir.path,
+      'backup_build_${DateTime.now().microsecondsSinceEpoch}.zip',
+    );
+
     // ZIP圧縮とAES暗号化はバックグラウンドisolateにまとめて任せる
     // (_buildEncryptedBackupZip 参照)。
     final encrypted = await compute(
       _buildEncryptedBackupZip,
-      _CreateZipArgs(zipEntries, Uint8List.fromList(jsonBytes)),
+      _CreateZipArgs(zipEntries, Uint8List.fromList(jsonBytes), tmpZipPath),
     );
     // 拡張子は .zip のままにする(中身はもう valid な zip ではないが)。
     // Android の保存/選択ダイアログは .tmbackup のような独自拡張子だと
@@ -309,16 +377,32 @@ class BackupService {
         ? await _decryptBytes(bytes)
         : bytes;
 
-    // ZIP展開もバックグラウンドisolateで行う(_decodeZipEntries 参照)。
-    final Map<String, Uint8List> zipEntries;
+    // getTemporaryDirectory() はメインisolateで解決し、パス文字列だけを
+    // isolateに渡す(path_provider はバックグラウンドisolateから直接は
+    // 使えないため)。
+    final tmpDir = await getTemporaryDirectory();
+    final stagingDirPath = p.join(
+      tmpDir.path,
+      'restore_staging_${DateTime.now().microsecondsSinceEpoch}',
+    );
+
+    // ZIP展開もバックグラウンドisolateで行う(_extractBackupZip 参照)。
+    // 添付ファイルは1つずつ一時ディレクトリに書き出すだけで、全ファイル分
+    // のバイト列をまとめてメモリに保持することはない。
+    final _ExtractResult result;
     try {
-      zipEntries = await compute(_decodeZipEntries, zipBytes);
+      result = await compute(
+        _extractBackupZip,
+        _ExtractArgs(zipBytes, stagingDirPath),
+      );
     } catch (_) {
+      await _deleteDirectoryIfExists(stagingDirPath);
       throw const InvalidBackupFileException('このファイルはバックアップとして読み取れませんでした');
     }
 
-    final jsonBytesEntry = zipEntries['backup.json'];
+    final jsonBytesEntry = result.jsonBytes;
     if (jsonBytesEntry == null) {
+      await _deleteDirectoryIfExists(stagingDirPath);
       throw const InvalidBackupFileException('このファイルは手もとメモのバックアップではないようです');
     }
 
@@ -326,93 +410,131 @@ class BackupService {
     try {
       data = jsonDecode(utf8.decode(jsonBytesEntry)) as Map<String, dynamic>;
     } catch (_) {
+      await _deleteDirectoryIfExists(stagingDirPath);
       throw const InvalidBackupFileException('バックアップファイルの内容を読み取れませんでした');
     }
 
-    final backupVersion = data['backupVersion'] as int? ?? 1;
-    if (backupVersion > kBackupFormatVersion) {
-      throw UnsupportedBackupVersionException(
-        'このバックアップ(形式バージョン $backupVersion)は、お使いのアプリより'
-        '新しい形式です。アプリを最新版に更新してからお試しください。',
-      );
-    }
+    try {
+      final backupVersion = data['backupVersion'] as int? ?? 1;
+      if (backupVersion > kBackupFormatVersion) {
+        throw UnsupportedBackupVersionException(
+          'このバックアップ(形式バージョン $backupVersion)は、お使いのアプリより'
+          '新しい形式です。アプリを最新版に更新してからお試しください。',
+        );
+      }
 
-    final genresJson = (data['genres'] as List<dynamic>?) ?? const [];
-    for (var i = 0; i < genresJson.length; i++) {
-      final g = genresJson[i] as Map<String, dynamic>;
-      final genre = Genre(
-        id: g['id'] as String,
-        name: g['name'] as String,
-        color: Color(g['color'] as int),
-      );
-      await _genreRepository.upsertGenre(genre, sortOrder: i);
-    }
+      final genresJson = (data['genres'] as List<dynamic>?) ?? const [];
+      for (var i = 0; i < genresJson.length; i++) {
+        final g = genresJson[i] as Map<String, dynamic>;
+        final genre = Genre(
+          id: g['id'] as String,
+          name: g['name'] as String,
+          color: Color(g['color'] as int),
+        );
+        await _genreRepository.upsertGenre(genre, sortOrder: i);
+      }
 
-    final audioDir = await _voiceMemosDirectory();
-    final imagesDir = await _memoImagesDirectory();
-    final memosJson = (data['memos'] as List<dynamic>?) ?? const [];
-    for (final entry in memosJson) {
-      final memoMap = entry as Map<String, dynamic>;
-      final memoId = memoMap['id'] as String;
-      String? restoredAudioPath;
-      final audioFileInZip = memoMap['audioFile'] as String?;
-      if (audioFileInZip != null) {
-        final audioBytes = zipEntries[audioFileInZip];
-        if (audioBytes != null) {
-          final outPath = p.join(audioDir.path, p.basename(audioFileInZip));
-          await File(outPath).writeAsBytes(audioBytes);
-          restoredAudioPath = outPath;
+      final audioDir = await _voiceMemosDirectory();
+      final imagesDir = await _memoImagesDirectory();
+      final memosJson = (data['memos'] as List<dynamic>?) ?? const [];
+      for (final entry in memosJson) {
+        final memoMap = entry as Map<String, dynamic>;
+        final memoId = memoMap['id'] as String;
+        String? restoredAudioPath;
+        final audioFileInZip = memoMap['audioFile'] as String?;
+        if (audioFileInZip != null) {
+          final stagedPath = result.extractedPaths[audioFileInZip];
+          if (stagedPath != null) {
+            final outPath = p.join(audioDir.path, p.basename(audioFileInZip));
+            await _moveStagedFile(stagedPath, outPath);
+            restoredAudioPath = outPath;
+          }
+        }
+
+        final memo = Memo(
+          id: memoId,
+          title: memoMap['title'] as String,
+          content: memoMap['content'] as String,
+          genreId: memoMap['genreId'] as String?,
+          audioPath: restoredAudioPath,
+          audioDurationMs: memoMap['audioDurationMs'] as int?,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(
+            memoMap['createdAt'] as int,
+          ),
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(
+            memoMap['updatedAt'] as int,
+          ),
+          // お気に入り機能を追加する前のバックアップには無い項目なので、
+          // 無ければ false 扱いにする。
+          isFavorite: memoMap['isFavorite'] as bool? ?? false,
+        );
+        await _memoRepository.upsertMemo(memo);
+
+        // このメモの画像は、バックアップの内容で洗い替える(復元前に既に
+        // 付いていた画像は一旦すべて消してから、バックアップの内容を
+        // 入れ直す)。
+        await _imageRepository.deleteImagesForMemo(memoId);
+        final imagesJson = (memoMap['images'] as List<dynamic>?) ?? const [];
+        for (var i = 0; i < imagesJson.length; i++) {
+          final imageMap = imagesJson[i] as Map<String, dynamic>;
+          final fileInZip = imageMap['file'] as String?;
+          if (fileInZip == null) continue;
+          final stagedPath = result.extractedPaths[fileInZip];
+          if (stagedPath == null) continue;
+          final outPath = p.join(imagesDir.path, p.basename(fileInZip));
+          await _moveStagedFile(stagedPath, outPath);
+          await _imageRepository.insertImage(
+            MemoImage(
+              id: p.basenameWithoutExtension(fileInZip),
+              memoId: memoId,
+              path: outPath,
+              sortOrder: imageMap['sortOrder'] as int? ?? i,
+              createdAt: DateTime.now(),
+              type: MemoAttachmentType.fromName(
+                imageMap['type'] as String? ?? 'image',
+              ),
+            ),
+          );
         }
       }
 
-      final memo = Memo(
-        id: memoId,
-        title: memoMap['title'] as String,
-        content: memoMap['content'] as String,
-        genreId: memoMap['genreId'] as String?,
-        audioPath: restoredAudioPath,
-        audioDurationMs: memoMap['audioDurationMs'] as int?,
-        createdAt: DateTime.fromMillisecondsSinceEpoch(
-          memoMap['createdAt'] as int,
-        ),
-        updatedAt: DateTime.fromMillisecondsSinceEpoch(
-          memoMap['updatedAt'] as int,
-        ),
-        // お気に入り機能を追加する前のバックアップには無い項目なので、
-        // 無ければ false 扱いにする。
-        isFavorite: memoMap['isFavorite'] as bool? ?? false,
-      );
-      await _memoRepository.upsertMemo(memo);
+      return (memosJson.length, genresJson.length);
+    } finally {
+      // 展開済みファイルは移動(rename)済みのはずだが、対応するメモが
+      // JSON に無かったものなどが残っている可能性もあるので、
+      // 一時ディレクトリごと必ず掃除する。
+      await _deleteDirectoryIfExists(stagingDirPath);
+    }
+  }
 
-      // このメモの画像は、バックアップの内容で洗い替える(復元前に既に
-      // 付いていた画像は一旦すべて消してから、バックアップの内容を
-      // 入れ直す)。
-      await _imageRepository.deleteImagesForMemo(memoId);
-      final imagesJson = (memoMap['images'] as List<dynamic>?) ?? const [];
-      for (var i = 0; i < imagesJson.length; i++) {
-        final imageMap = imagesJson[i] as Map<String, dynamic>;
-        final fileInZip = imageMap['file'] as String?;
-        if (fileInZip == null) continue;
-        final imageBytes = zipEntries[fileInZip];
-        if (imageBytes == null) continue;
-        final outPath = p.join(imagesDir.path, p.basename(fileInZip));
-        await File(outPath).writeAsBytes(imageBytes);
-        await _imageRepository.insertImage(
-          MemoImage(
-            id: p.basenameWithoutExtension(fileInZip),
-            memoId: memoId,
-            path: outPath,
-            sortOrder: imageMap['sortOrder'] as int? ?? i,
-            createdAt: DateTime.now(),
-            type: MemoAttachmentType.fromName(
-              imageMap['type'] as String? ?? 'image',
-            ),
-          ),
-        );
+  /// 一時展開先から実際の保存先へファイルを移す。同一ファイルシステム上
+  /// なら rename はOSレベルのメタデータ操作だけで完了し、Dartのメモリを
+  /// 経由しない(file_picker 経由で選んだバックアップ ZIP の展開先と、
+  /// アプリの保存領域は通常どちらも端末内部ストレージの同じ
+  /// ファイルシステム上にあるため、これで十分なはず)。万が一 rename が
+  /// 使えない環境向けに、コピー+削除にフォールバックする。
+  Future<void> _moveStagedFile(String stagedPath, String outPath) async {
+    try {
+      await File(stagedPath).rename(outPath);
+    } catch (_) {
+      await File(stagedPath).copy(outPath);
+      try {
+        await File(stagedPath).delete();
+      } catch (_) {
+        // 消せなくても無視する(後で一時ディレクトリごと掃除される)。
       }
     }
+  }
 
-    return (memosJson.length, genresJson.length);
+  Future<void> _deleteDirectoryIfExists(String path) async {
+    final dir = Directory(path);
+    if (await dir.exists()) {
+      try {
+        await dir.delete(recursive: true);
+      } catch (_) {
+        // 掃除に失敗しても復元自体は成功しているので無視する。
+      }
+    }
   }
 
   bool _looksEncrypted(Uint8List bytes) {

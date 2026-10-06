@@ -53,7 +53,43 @@ class MemoRepository {
       }).toList();
     }
 
-    return memos;
+    return _withAttachmentFlags(db, memos);
+  }
+
+  /// 一覧画面(MemoListItem)で添付の種類(写真・動画)をアイコンで示す
+  /// ための情報を、1回のクエリでまとめて取得して付与する。1件ずつ
+  /// memo_images を問い合わせる(N+1)のを避けるため。
+  Future<List<Memo>> _withAttachmentFlags(Database db, List<Memo> memos) async {
+    if (memos.isEmpty) return memos;
+
+    final ids = memos.map((m) => m.id).toList();
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT memo_id, type FROM memo_images '
+      'WHERE memo_id IN ($placeholders)',
+      ids,
+    );
+
+    final imageMemoIds = <String>{};
+    final videoMemoIds = <String>{};
+    for (final row in rows) {
+      final memoId = row['memo_id']! as String;
+      if (row['type'] == 'video') {
+        videoMemoIds.add(memoId);
+      } else {
+        imageMemoIds.add(memoId);
+      }
+    }
+
+    if (imageMemoIds.isEmpty && videoMemoIds.isEmpty) return memos;
+
+    return [
+      for (final memo in memos)
+        memo.copyWith(
+          hasImage: imageMemoIds.contains(memo.id),
+          hasVideo: videoMemoIds.contains(memo.id),
+        ),
+    ];
   }
 
   /// ごみ箱に入っているメモを、削除日時が新しい順に返す。
