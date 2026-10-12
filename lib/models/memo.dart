@@ -1,3 +1,6 @@
+/// 一覧画面の絞り込みで選べる添付の種類。複数選択可(OR条件)。
+enum MemoAttachmentFilter { audio, image, video }
+
 /// 1件のメモ(テキスト or 音声メモ)を表すモデル。
 class Memo {
   Memo({

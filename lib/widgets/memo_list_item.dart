@@ -28,6 +28,17 @@ class MemoListItem extends StatelessWidget {
   final bool selectionMode;
   final bool selected;
 
+  /// leading の丸アイコンに出す、そのメモを代表する添付種別のアイコン。
+  /// 複数種類が付いていても丸アイコンには1つしか出せないため、
+  /// 動画 > 写真 > 音声 > (何も無ければ)テキスト の優先順で決める。
+  /// 実際に何が付いているかは trailing の小さいアイコン行で全て分かる。
+  IconData get _primaryIcon {
+    if (memo.hasVideo) return Icons.videocam;
+    if (memo.hasImage) return Icons.photo;
+    if (memo.hasAudio) return Icons.mic;
+    return Icons.notes;
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('yyyy/MM/dd HH:mm');
@@ -60,11 +71,7 @@ class MemoListItem extends StatelessWidget {
             )
           : CircleAvatar(
               backgroundColor: genre?.color ?? Colors.grey.shade400,
-              child: Icon(
-                memo.hasAudio ? Icons.mic : Icons.notes,
-                color: Colors.white,
-                size: 20,
-              ),
+              child: Icon(_primaryIcon, color: Colors.white, size: 20),
             ),
       title: Row(
         children: [

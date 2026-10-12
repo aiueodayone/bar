@@ -36,6 +36,10 @@ class MemoProvider extends ChangeNotifier {
   bool _favoritesOnly = false;
   bool get favoritesOnly => _favoritesOnly;
 
+  Set<MemoAttachmentFilter> _attachmentFilters = {};
+  Set<MemoAttachmentFilter> get attachmentFilters =>
+      Set.unmodifiable(_attachmentFilters);
+
   String _searchQuery = '';
   String get searchQuery => _searchQuery;
 
@@ -51,6 +55,7 @@ class MemoProvider extends ChangeNotifier {
       genreId: _genreFilter,
       searchQuery: _searchQuery,
       favoritesOnly: _favoritesOnly,
+      attachmentFilters: _attachmentFilters,
     );
     _isLoading = false;
     notifyListeners();
@@ -68,6 +73,12 @@ class MemoProvider extends ChangeNotifier {
 
   void setFavoritesOnly(bool favoritesOnly) {
     _favoritesOnly = favoritesOnly;
+    load();
+  }
+
+  /// 添付種別フィルタ(音声/写真/動画)を一括で設定する。複数選択可。
+  void setAttachmentFilters(Set<MemoAttachmentFilter> filters) {
+    _attachmentFilters = filters;
     load();
   }
 

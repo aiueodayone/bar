@@ -18,6 +18,7 @@ class MemoRepository {
     String? genreId,
     String searchQuery = '',
     bool favoritesOnly = false,
+    Set<MemoAttachmentFilter> attachmentFilters = const {},
   }) async {
     final db = await _dbHelper.database;
     final where = <String>['deleted_at IS NULL'];
@@ -53,7 +54,23 @@ class MemoRepository {
       }).toList();
     }
 
-    return _withAttachmentFlags(db, memos);
+    memos = await _withAttachmentFlags(db, memos);
+
+    // 添付種別フィルタ(音声/写真/動画、複数選択でOR条件)。hasImage/
+    // hasVideo は _withAttachmentFlags が埋めた後でないと判定できないため、
+    // ここで最後に絞り込む。
+    if (attachmentFilters.isNotEmpty) {
+      memos = memos.where((memo) {
+        return (attachmentFilters.contains(MemoAttachmentFilter.audio) &&
+                memo.hasAudio) ||
+            (attachmentFilters.contains(MemoAttachmentFilter.image) &&
+                memo.hasImage) ||
+            (attachmentFilters.contains(MemoAttachmentFilter.video) &&
+                memo.hasVideo);
+      }).toList();
+    }
+
+    return memos;
   }
 
   /// 一覧画面(MemoListItem)で添付の種類(写真・動画)をアイコンで示す

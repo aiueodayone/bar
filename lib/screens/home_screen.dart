@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/memo.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
@@ -42,6 +43,73 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _clearSelection() => setState(_selectedIds.clear);
+
+  Future<void> _showAttachmentFilterDialog(MemoProvider memoProvider) async {
+    var audio = memoProvider.attachmentFilters.contains(
+      MemoAttachmentFilter.audio,
+    );
+    var image = memoProvider.attachmentFilters.contains(
+      MemoAttachmentFilter.image,
+    );
+    var video = memoProvider.attachmentFilters.contains(
+      MemoAttachmentFilter.video,
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('添付で絞り込み'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CheckboxListTile(
+                value: audio,
+                title: const Text('音声入りのメモ'),
+                onChanged: (v) => setDialogState(() => audio = v ?? false),
+              ),
+              CheckboxListTile(
+                value: image,
+                title: const Text('画像入りのメモ'),
+                onChanged: (v) => setDialogState(() => image = v ?? false),
+              ),
+              CheckboxListTile(
+                value: video,
+                title: const Text('動画入りのメモ'),
+                onChanged: (v) => setDialogState(() => video = v ?? false),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setDialogState(() {
+                  audio = false;
+                  image = false;
+                  video = false;
+                });
+              },
+              child: const Text('クリア'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('適用'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    memoProvider.setAttachmentFilters({
+      if (audio) MemoAttachmentFilter.audio,
+      if (image) MemoAttachmentFilter.image,
+      if (video) MemoAttachmentFilter.video,
+    });
+  }
 
   Future<void> _deleteSelected() async {
     final count = _selectedIds.length;
@@ -129,6 +197,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 IconButton(
+                  icon: Icon(
+                    memoProvider.attachmentFilters.isEmpty
+                        ? Icons.filter_list
+                        : Icons.filter_list_alt,
+                    color: memoProvider.attachmentFilters.isEmpty
+                        ? null
+                        : Theme.of(context).colorScheme.primary,
+                  ),
+                  tooltip: '添付で絞り込み',
+                  onPressed: () => _showAttachmentFilterDialog(memoProvider),
+                ),
+                IconButton(
                   icon: const Icon(Icons.settings_outlined),
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen()),
@@ -152,7 +232,11 @@ class _HomeScreenState extends State<HomeScreen> {
             child: memoProvider.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : memoProvider.memos.isEmpty
-                ? _EmptyState(favoritesOnly: memoProvider.favoritesOnly)
+                ? _EmptyState(
+                    favoritesOnly: memoProvider.favoritesOnly,
+                    attachmentFilterActive:
+                        memoProvider.attachmentFilters.isNotEmpty,
+                  )
                 : ListView.separated(
                     itemCount: memoProvider.memos.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
@@ -202,12 +286,22 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.favoritesOnly});
+  const _EmptyState({
+    required this.favoritesOnly,
+    this.attachmentFilterActive = false,
+  });
 
   final bool favoritesOnly;
+  final bool attachmentFilterActive;
 
   @override
   Widget build(BuildContext context) {
+    final message = attachmentFilterActive
+        ? '絞り込み条件に一致するメモがありません\nAppBar の絞り込みアイコンから条件を変更できます'
+        : favoritesOnly
+        ? 'お気に入りのメモがありません\n一覧の星マークをタップすると登録できます'
+        : 'メモがありません\n右下の + からテキストや音声メモを作成できます';
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -215,15 +309,17 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              favoritesOnly ? Icons.star_border : Icons.notes,
+              attachmentFilterActive
+                  ? Icons.filter_list_off
+                  : favoritesOnly
+                  ? Icons.star_border
+                  : Icons.notes,
               size: 64,
               color: Colors.grey.shade400,
             ),
             const SizedBox(height: 12),
             Text(
-              favoritesOnly
-                  ? 'お気に入りのメモがありません\n一覧の星マークをタップすると登録できます'
-                  : 'メモがありません\n右下の + からテキストや音声メモを作成できます',
+              message,
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600),
             ),

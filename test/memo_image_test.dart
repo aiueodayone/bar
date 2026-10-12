@@ -273,4 +273,92 @@ void main() {
     expect(byId['flags-both']!.hasImage, isTrue);
     expect(byId['flags-both']!.hasVideo, isTrue);
   });
+
+  test('fetchMemos() attachmentFilters narrows the list by attachment type, '
+      'with multiple selected types combined as OR', () async {
+    final memoRepository = MemoRepository(dbHelper: dbHelper);
+    final imageRepository = MemoImageRepository(dbHelper: dbHelper);
+    final now = DateTime.now();
+
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'filter-none',
+        title: '添付なし',
+        content: '',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'filter-audio',
+        title: '音声のみ',
+        content: '',
+        audioPath: '/tmp/filter-audio.m4a',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'filter-image',
+        title: '写真のみ',
+        content: '',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'filter-img-1',
+        memoId: 'filter-image',
+        path: '/tmp/filter-photo.jpg',
+        sortOrder: 0,
+        createdAt: now,
+      ),
+    );
+    await memoRepository.upsertMemo(
+      Memo(
+        id: 'filter-video',
+        title: '動画のみ',
+        content: '',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await imageRepository.insertImage(
+      MemoImage(
+        id: 'filter-vid-1',
+        memoId: 'filter-video',
+        path: '/tmp/filter-video.mp4',
+        sortOrder: 0,
+        createdAt: now,
+        type: MemoAttachmentType.video,
+      ),
+    );
+
+    final audioOnly = await memoRepository.fetchMemos(
+      attachmentFilters: {MemoAttachmentFilter.audio},
+    );
+    expect(audioOnly.map((m) => m.id).toSet(), {'filter-audio'});
+
+    final imageOrVideo = await memoRepository.fetchMemos(
+      attachmentFilters: {
+        MemoAttachmentFilter.image,
+        MemoAttachmentFilter.video,
+      },
+    );
+    expect(imageOrVideo.map((m) => m.id).toSet(), {
+      'filter-image',
+      'filter-video',
+    });
+
+    final unfiltered = await memoRepository.fetchMemos();
+    expect(unfiltered.map((m) => m.id).toSet(), {
+      'filter-none',
+      'filter-audio',
+      'filter-image',
+      'filter-video',
+    });
+  });
 }
