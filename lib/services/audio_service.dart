@@ -32,11 +32,24 @@ class AudioService {
         encoder: AudioEncoder.wav,
         sampleRate: kAudioSampleRate,
         numChannels: 1,
-        // Bluetoothイヤホン/ヘッドセットが接続されていても、その内蔵マイクへ
-        // 録音を奪われないようにする(record パッケージはデフォルトで
-        // Bluetooth SCO 接続を試み、繋がっていればそちらを優先してしまう)。
-        // 本体のマイクで録音したいので無効化する。
-        androidConfig: AndroidRecordConfig(manageBluetooth: false),
+        // この録音は文字起こし(Vosk)にかけることを前提としているので、
+        // 認識しやすい音声になるよう端末側の処理を使う(どちらも端末が
+        // 対応していない場合は単に無視される)。
+        // - noiseSuppress: 環境音を減らす
+        // - autoGain: 声が小さい録音でも音量を持ち上げる
+        noiseSuppress: true,
+        autoGain: true,
+        androidConfig: AndroidRecordConfig(
+          // Bluetoothイヤホン/ヘッドセットが接続されていても、その内蔵マイクへ
+          // 録音を奪われないようにする(record パッケージはデフォルトで
+          // Bluetooth SCO 接続を試み、繋がっていればそちらを優先してしまう)。
+          // 本体のマイクで録音したいので無効化する。
+          manageBluetooth: false,
+          // 音声認識エンジンに渡すことを想定した音声ソース。他の収音モードが
+          // 掛けがちな音質補正(人の声を聞きやすくするための処理)を避け、
+          // Vosk のような認識器にとって扱いやすい素のままの音声になる。
+          audioSource: AndroidAudioSource.voiceRecognition,
+        ),
       ),
       path: path,
     );

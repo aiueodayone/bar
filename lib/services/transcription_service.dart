@@ -137,7 +137,7 @@ class TranscriptionService {
       // 言語向けの挙動)。日本語は単語間にスペースを入れないため、その
       // ままだと不自然な空白だらけの文になる。ここで取り除いて自然な
       // 文にする。
-      return text.replaceAll(' ', '');
+      return _applyCorrections(text.replaceAll(' ', ''));
     } finally {
       await recognizer.dispose();
     }
@@ -173,6 +173,23 @@ class TranscriptionService {
     } finally {
       client.close();
     }
+  }
+
+  /// 認識結果に対する簡易的な補正。
+  ///
+  /// vosk-model-small-ja-0.22 は軽量な分、特定の単語を一貫して誤認識する
+  /// ことがある。今のところ実際の利用でどの単語がよく誤認識されるかの
+  /// データが無いため、ここでは機械的に安全な補正(連続する空白の整理)
+  /// のみを行っている。今後、実際に頻出する誤認識パターンが分かったら
+  /// [_corrections] にエントリを追加していく。
+  static const Map<String, String> _corrections = {};
+
+  String _applyCorrections(String text) {
+    var result = text.trim();
+    for (final entry in _corrections.entries) {
+      result = result.replaceAll(entry.key, entry.value);
+    }
+    return result;
   }
 
   Uint8List _stripWavHeader(Uint8List bytes) {
