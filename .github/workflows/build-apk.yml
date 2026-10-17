@@ -52,3 +52,44 @@ jobs:
           name: memo-app-apk-debug
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 30
+
+  # 実際に持っていない(持ち得ない)様々なAndroid端末での動作確認の
+  # 代わりに、GitHub Actionsのランナー上でAndroidエミュレータを起動して
+  # integration_test/app_test.dart を動かす。古いAPIレベルと新しいAPI
+  # レベルを両方試すことで、OSバージョン差による不具合をある程度拾える
+  # ようにする(このジョブは build ジョブと独立に並行実行される)。
+  integration_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [26, 34]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # GitHub提供のランナーはハードウェア仮想化(KVM)に対応しているが、
+      # ランナーのユーザーに /dev/kvm への権限が無いと、起動が極端に遅い
+      # ソフトウェアエミュレーションにフォールバックしてしまう。
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run integration test on API ${{ matrix.api-level }} emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: flutter test integration_test/app_test.dart

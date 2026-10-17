@@ -45,6 +45,9 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // integration_test (CIでAndroidエミュレータ上で実行する結合テスト)
+        // を動かすために必要な、計測テスト用のランナー指定。
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
