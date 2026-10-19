@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import '../services/ad_consent_service.dart';
+
 /// バナー広告ユニットID(本番)。
 const String kBannerAdUnitId = 'ca-app-pub-3993791245597369/9355406914';
 
@@ -20,7 +22,21 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
   @override
   void initState() {
     super.initState();
-    _loadAd();
+    // GDPR 等の同意取得(UMP)が済むまでは広告をリクエストしない。
+    // 同意不要の地域では起動直後に true になるので、従来と同じ速さで出る。
+    final consent = AdConsentService.instance.canRequestAds;
+    if (consent.value) {
+      _loadAd();
+    } else {
+      consent.addListener(_onConsentChanged);
+    }
+  }
+
+  void _onConsentChanged() {
+    final consent = AdConsentService.instance.canRequestAds;
+    if (!consent.value) return;
+    consent.removeListener(_onConsentChanged);
+    if (mounted && _bannerAd == null) _loadAd();
   }
 
   void _loadAd() {
@@ -44,6 +60,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
   @override
   void dispose() {
+    AdConsentService.instance.canRequestAds.removeListener(_onConsentChanged);
     _bannerAd?.dispose();
     super.dispose();
   }

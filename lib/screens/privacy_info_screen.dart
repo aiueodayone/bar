@@ -62,7 +62,10 @@ class PrivacyInfoScreen extends StatelessWidget {
             body:
                 '広告表示(Google AdMob)や購入処理(Google Play)には、その'
                 '機能に必要な最小限の情報(広告ID等)がGoogleに渡ることが'
-                'あります。これらはメモの内容や録音データとは一切関係ありません。',
+                'あります。これらはメモの内容や録音データとは一切関係ありません。\n\n'
+                'EU・英国など同意の取得が必要な地域では、広告を表示する前に'
+                '同意を求める画面を表示します。同意の内容は「設定」の'
+                '「広告のプライバシー設定」からいつでも変更できます。',
           ),
           _Section(
             icon: Icons.visibility_off_outlined,

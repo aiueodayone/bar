@@ -9,6 +9,7 @@ import '../providers/app_lock_provider.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/genre_provider.dart';
 import '../providers/memo_provider.dart';
+import '../services/ad_consent_service.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
 import '../widgets/app_lock_setup_dialog.dart';
@@ -370,6 +371,22 @@ class SettingsScreen extends StatelessWidget {
               leading: const Icon(Icons.restore),
               title: const Text('購入を復元'),
               onTap: () => _restorePurchases(context),
+            ),
+            // EU・英国など同意取得が必要な地域の利用者には、同意内容を後から
+            // 変更できる入口を常に用意しておく必要がある(Google の要件)。
+            // それ以外の地域では UMP が「不要」と返すので表示されない。
+            ValueListenableBuilder<bool>(
+              valueListenable: AdConsentService.instance.privacyOptionsRequired,
+              builder: (context, isRequired, _) {
+                if (!isRequired) return const SizedBox.shrink();
+                return ListTile(
+                  leading: const Icon(Icons.tune),
+                  title: const Text('広告のプライバシー設定'),
+                  subtitle: const Text('広告表示に関する同意内容を確認・変更します'),
+                  onTap: () =>
+                      AdConsentService.instance.showPrivacyOptionsForm(),
+                );
+              },
             ),
           ],
           const Divider(),

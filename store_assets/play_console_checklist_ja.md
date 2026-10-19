@@ -13,21 +13,31 @@ Play Console 側の作業は手作業になるため、迷わないよう順番�
 | ストア掲載文(アプリ名・短い説明・詳細説明) | `store_assets/store_listing_ja.md` |
 | アップロード鍵(署名鍵) | 手元に保存した `upload-keystore.jks` と `keystore-info.txt`(リポジトリには入れていない) |
 | 動作確認 | CI で単体/ウィジェットテスト、Android 8(API 26)/14(API 34) エミュレータでの結合テストが通ること |
+| 署名済み AAB(Android App Bundle) | CI の成果物 `memo-app-aab`(下記「1.」の Secrets 登録後に署名付きになる) |
+| GDPR 同意画面(UMP) | 実装済み(`lib/services/ad_consent_service.dart`)。AdMob 管理画面での同意メッセージ作成が別途必要(下記「5.」) |
 
 まだ無いもの:
 
 - **スマートフォンのスクリーンショット(最低2枚、推奨4〜8枚)** … 実機で撮影する。縦長(例: 1080x1920 以上)。
-- **署名済み AAB(Android App Bundle)** … 下記「1. リリース用ビルド」参照。新規アプリは APK ではなく AAB での提出が必須。
 
-## 1. リリース用ビルド(AAB)
+## 1. リリース用ビルド(AAB)の署名を CI に設定する
 
-CI は現状 APK しか作っておらず、しかも署名鍵を持っていないため debug 署名のままになる。
-Play に上げる AAB は次のどちらかで作る。
+CI(`.github/workflows/build-apk.yml` の build ジョブ)は、GitHub Secrets に鍵があれば署名済み AAB を、無ければ debug 署名の AAB を `memo-app-aab` として出す。
+新規アプリは APK ではなく AAB での提出が必須なので、公開前に次の 4 つを登録する。
 
-- A. 手元の PC(Android SDK あり)で `android/key.properties` を置いて `flutter build appbundle --release`
-- B. CI に GitHub Secrets として鍵を登録し、CI で署名済み AAB を作る(鍵を base64 で Secret に入れ、ビルド時に復元する)
+GitHub のリポジトリ → Settings → Secrets and variables → Actions → New repository secret:
 
-B の方が「毎回同じ手順で作れる」「PC に環境が要らない」ので、こちらを推奨。
+| Secret 名 | 値 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `upload-keystore.jks` を base64 にした文字列(改行なし)。Mac: `base64 -i upload-keystore.jks \| tr -d '\n'` / Linux: `base64 -w0 upload-keystore.jks` / Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("upload-keystore.jks"))` |
+| `ANDROID_KEYSTORE_PASSWORD` | `keystore-info.txt` の storePassword |
+| `ANDROID_KEY_PASSWORD` | `keystore-info.txt` の keyPassword(PKCS12 形式なので storePassword と同じ値) |
+| `ANDROID_KEY_ALIAS` | `upload` |
+
+登録後に CI を一度回し(何かを push するか、Actions 画面から "Run workflow")、成果物 `memo-app-aab` をダウンロードする。
+ログの "Restore upload keystore from secrets" ステップに "Release signing configured from secrets." と出ていれば署名済み。
+
+※ 実機に直接入れる用の `memo-app-apk` は従来どおり debug 署名のまま(署名を変えると、入れ替え時に一度アンインストールが必要になるため)。
 
 ## 2. Play Console でアプリを作成
 
@@ -98,8 +108,10 @@ Play Console → ポリシー → アプリのコンテンツ。すべて記入�
 
 ### 公開対象の国・地域
 
-- 日本のみにするか、全世界にするかを決める。
-- **全世界(EU/英国を含む)で公開する場合**、AdMob の広告を出すには GDPR の同意取得(UMP SDK による同意メッセージ)の実装が実質必須。現状のアプリには入っていないので、その場合は実装してから公開する。日本のみなら不要。
+- 全世界で公開する前提。EU/英国向けの GDPR 同意画面(UMP)はアプリに実装済み。
+- **AdMob 管理画面での作業が必要**: AdMob → プライバシーとメッセージ → 「GDPR」でこのアプリ向けの同意メッセージを作成して公開する。これが無いと、同意が必要な地域では同意画面が出せず広告が表示されない(アプリ自体は普通に使える)。
+- 同意が不要な地域(日本など)では何も表示されず、従来どおり広告が出る。
+- 動作確認したい場合: AdMob の同意メッセージ設定でテストデバイスを登録し、地域を EEA に偽装して確認できる(AdMob ヘルプ「同意メッセージのテスト」参照)。
 
 ## 6. アプリ内アイテム(課金)の登録
 

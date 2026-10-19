@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/app_lock_provider.dart';
@@ -12,6 +11,7 @@ import 'providers/memo_provider.dart';
 import 'screens/app_lock_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'services/ad_consent_service.dart';
 import 'services/settings_service.dart';
 
 void main() {
@@ -28,14 +28,16 @@ void main() {
 
       _registerAdditionalLicenses();
 
-      // 広告SDKの初期化はネットワーク状況によっては数秒〜それ以上かかる
-      // ことがある。ここで await してしまうと、その間ずっとアプリの最初の
-      // 画面が描画されず(OS側のスプラッシュがぐるぐる回り続けたように
-      // 見える)、起動が遅くなる。BannerAdWidget 側は読み込み前は何も
-      // 表示しない作りになっているので、待たずに裏で初期化を進める。
-      unawaited(_initAds());
-
       runApp(const MemoApp());
+
+      // 広告の同意取得(UMP)と広告SDKの初期化はネットワーク状況によっては
+      // 数秒〜それ以上かかることがある。ここで await してしまうと、その間
+      // ずっとアプリの最初の画面が描画されず(OS側のスプラッシュがぐるぐる
+      // 回り続けたように見える)、起動が遅くなる。BannerAdWidget 側は同意が
+      // 取れるまで何も表示しない作りになっているので、待たずに裏で進める。
+      // 同意画面は OS のダイアログとして最初の画面の上に出るため、
+      // runApp の後に呼ぶ。
+      unawaited(_initAds());
     },
     (error, stack) {
       // 未捕捉の例外はここで握りつぶし、アプリを落とさない。
@@ -46,7 +48,7 @@ void main() {
 
 Future<void> _initAds() async {
   try {
-    await MobileAds.instance.initialize();
+    await AdConsentService.instance.initialize();
   } catch (_) {
     // 広告なしで続行
   }
